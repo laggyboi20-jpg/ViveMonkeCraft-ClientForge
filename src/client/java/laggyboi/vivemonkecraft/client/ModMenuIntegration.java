@@ -488,6 +488,63 @@ public class ModMenuIntegration implements ModMenuApi {
                 .setTooltip(Component.literal("Render split arm lines at your hands. Green = touching a block, red = not."))
                 .setSaveConsumer(v -> MovementConfig.showHandMarkers = v).build());
 
+        // -----------------------------------------------------------------
+        // GAMEPLAY — fall handling + hand/grip smoothing (1.0.0.3)
+        // -----------------------------------------------------------------
+        ConfigCategory gameplay = builder.getOrCreateCategory(Component.literal("Gameplay"));
+
+        gameplay.addEntry(eb.startBooleanToggle(Component.literal("Survive fatal falls"), MovementConfig.surviveFatalFall)
+                .setDefaultValue(pB("surviveFatalFall"))
+                .setTooltip(
+                        Component.literal("A last stand: a fall that would KILL you leaves you at half your"),
+                        Component.literal("hearts (minus 3 food) instead — but only if you were at FULL health."),
+                        Component.literal("Landing at half health means it can't chain until you heal back up."),
+                        Component.literal("Singleplayer / LAN host only from the client."))
+                .setSaveConsumer(v -> MovementConfig.surviveFatalFall = v).build());
+
+        gameplay.addEntry(eb.startBooleanToggle(Component.literal("Disable fall damage"), MovementConfig.disableFallDamage)
+                .setDefaultValue(pB("disableFallDamage"))
+                .setTooltip(
+                        Component.literal("Turn off fall damage entirely while the mod is on."),
+                        Component.literal("Overrides 'Survive fatal falls'. Singleplayer / LAN host only."))
+                .setSaveConsumer(v -> MovementConfig.disableFallDamage = v).build());
+
+        gameplay.addEntry(eb.startBooleanToggle(Component.literal("Single floor grip (smoother walking)"), MovementConfig.singleFloorGrip)
+                .setDefaultValue(pB("singleFloorGrip"))
+                .setTooltip(
+                        Component.literal("Only one hand can grip the FLOOR at a time, so the trailing hand of"),
+                        Component.literal("your gorilla walk can't accidentally anchor and stop you dead."),
+                        Component.literal("Walls/ceilings are unaffected — two-handed climbing still works."))
+                .setSaveConsumer(v -> MovementConfig.singleFloorGrip = v).build());
+
+        gameplay.addEntry(eb.startBooleanToggle(Component.literal("Grounded grip release"), MovementConfig.groundedGripRelease)
+                .setDefaultValue(pB("groundedGripRelease"))
+                .setTooltip(
+                        Component.literal("Auto-releases a resting floor grip once you're standing on the ground,"),
+                        Component.literal("so you're not wedged after jumping straight up with your hand held in"),
+                        Component.literal("place — no need to pull your hand back before you can walk."))
+                .setSaveConsumer(v -> MovementConfig.groundedGripRelease = v).build());
+
+        // -----------------------------------------------------------------
+        // HOW-TO — text tutorials (no settings, just guidance)
+        // -----------------------------------------------------------------
+        ConfigCategory howto = builder.getOrCreateCategory(Component.literal("How-to"));
+
+        howto.addEntry(eb.startTextDescription(Component.literal(
+                "§e§lToggle Monke movement from Vivecraft's radial menu§r\n"
+              + "§7ViveMonkeCraft adds a keybind called §f\"ViveMonkeCraft: Toggle\"§7 "
+              + "(id §8key.vivemonkecraft.toggle§7). It is §funbound§7 by default.\n\n"
+              + "§71) First give it a keyboard key: §fOptions → Controls → Key Binds§7, "
+              + "find §f\"ViveMonkeCraft: Toggle\"§7 under §fMiscellaneous§7 and bind it to any "
+              + "free key (e.g. §fG§7). Vivecraft can only put a KEYBOARD key on a radial slot.\n\n"
+              + "§72) Open §fVivecraft Settings → Controls → Radial Menu§7 (or hold the radial-menu "
+              + "button and pick §fEdit§7).\n\n"
+              + "§73) Choose an empty slot, select §fKeyboard§7, and press the same key you bound in "
+              + "step 1. Name the slot §fMonke§7 if you like.\n\n"
+              + "§74) Save. Now opening the Vivecraft radial menu and picking that slot toggles "
+              + "gorilla locomotion on/off. §8(You can also toggle with §7/vmc§8 in chat.)"))
+              .build());
+
         return builder.build();
     }
 
@@ -521,7 +578,7 @@ public class ModMenuIntegration implements ModMenuApi {
                 MovementConfig.velocityLimit       = 0.05;
                 MovementConfig.jumpMultiplier      = 1.8;
                 MovementConfig.maxArmLength        = 3.0;
-                MovementConfig.handRadius          = 0.12;
+                MovementConfig.handRadius          = 0.10;
                 MovementConfig.hitboxHeightScale   = 0.25;
                 MovementConfig.stepAssist          = true;
                 MovementConfig.stepTeleport        = true;

@@ -498,6 +498,18 @@ public class GorillaLocomotionHandler {
         Vec3 mainVel = processHand(client, mainHand, touchMain, swingMain, headPos, fallSpeed, topFaceMain);
         Vec3 offVel  = processHand(client, offHand,  touchOff,  swingOff,  headPos, fallSpeed, topFaceOff);
 
+        // SINGLE FLOOR GRIP (see the GT-mode note): keep only one floor hand so a
+        // stray second floor touch can't snag walking. Drop the newcomer + its vel.
+        if (MovementConfig.singleFloorGrip
+                && mainHand.gripping && mainHand.floorGrip
+                && offHand.gripping  && offHand.floorGrip) {
+            if (!mainHand.wasGripping && offHand.wasGripping) {
+                mainHand.release(); mainVel = Vec3.ZERO;
+            } else {
+                offHand.release();  offVel  = Vec3.ZERO;
+            }
+        }
+
         // ---- FALL ABSORPTION: first floor contact while falling fast zeroes downward vel ----
         // When you extend your hand toward the ground during a fall, the first tick
         // your hand actually touches a block should stop your fall — otherwise you'd
@@ -1199,6 +1211,20 @@ public class GorillaLocomotionHandler {
         Vec3 dragMain = gtProcessHand(client, mainHand, touchMain, realMain, headPos, topFaceMain, fallSpeed);
         Vec3 dragOff  = gtProcessHand(client, offHand,  touchOff,  realOff,  headPos, topFaceOff,  fallSpeed);
 
+        // SINGLE FLOOR GRIP: never let BOTH hands hold the floor at once — the trailing
+        // hand of a walking gait brushing the ground would otherwise anchor and stop
+        // you. Keep whichever hand was already floor-gripping, drop the newcomer (and
+        // its drag). Walls/ceilings are untouched, so two-handed climbing still works.
+        if (MovementConfig.singleFloorGrip
+                && mainHand.gripping && mainHand.floorGrip
+                && offHand.gripping  && offHand.floorGrip) {
+            if (!mainHand.wasGripping && offHand.wasGripping) {
+                mainHand.release(); dragMain = Vec3.ZERO;   // off held first
+            } else {
+                offHand.release();  dragOff  = Vec3.ZERO;   // default: drop off hand
+            }
+        }
+
         int gripCount   = (mainHand.gripping ? 1 : 0) + (offHand.gripping ? 1 : 0);
         boolean anyGrip = gripCount > 0;
 
@@ -1356,6 +1382,19 @@ public class GorillaLocomotionHandler {
         // exactly at its anchor → zero drag → no movement (no phantom suction).
         Vec3 drag = state.anchor.subtract(realHand);
 
+        // GROUNDED GRIP RELEASE: if you're standing on the ground with a floor grip
+        // that's just resting (not being swung to pull yourself), drop it so you can
+        // walk without pulling your hand back. Fixes the "jump straight up, land, then
+        // you're wedged until you retract your hand" bug. An ACTIVE pull (drag above
+        // the jitter floor) keeps the grip, and a floor grip while airborne (hanging
+        // off a ledge, no ground under the feet) is never dropped.
+        if (MovementConfig.groundedGripRelease && state.floorGrip
+                && drag.length() < MovementConfig.minImpulse
+                && bodyOnSolidGround(client)) {
+            state.release();
+            return Vec3.ZERO;
+        }
+
         // Surface slip (GT Surface.slipPercentage): on ice the anchor chases the
         // hand — push-offs work, hanging on doesn't.
         double slip = (iceNearMultiplier(client, touchHand) > 0.0)
@@ -1432,6 +1471,16 @@ public class GorillaLocomotionHandler {
         // How far your hand moved (relative to head) since last tick = your swing.
         Vec3 swing = offset.subtract(state.prevOffset);
         state.prevOffset = offset;
+
+        // GROUNDED GRIP RELEASE (see the GT-mode note): a resting floor grip while
+        // standing on the ground is dropped so you can walk without retracting your
+        // hand. A real swing keeps the grip; airborne ledge grips are never dropped.
+        if (MovementConfig.groundedGripRelease && state.floorGrip
+                && swing.length() < MovementConfig.minImpulse
+                && bodyOnSolidGround(client)) {
+            state.release();
+            return Vec3.ZERO;
+        }
 
         // Body moves OPPOSITE to the swing, scaled by pull strength.
         return swing.scale(-MovementConfig.pullStrength);
@@ -1818,6 +1867,22 @@ public class GorillaLocomotionHandler {
     private AABB handAABB(Vec3 pos) {
         double r = MovementConfig.handRadius;
         return new AABB(pos.x - r, pos.y - r, pos.z - r, pos.x + r, pos.y + r, pos.z + r);
+    }
+
+    // Is the player's BODY actually resting on solid ground? Used by
+    // groundedGripRelease to tell "standing on the floor" (safe to drop a resting
+    // floor grip so you can walk) from "hanging off a ledge by a floor grip" (must
+    // keep it). onGround() alone is unreliable while gripping because the anchor
+    // holds the body with gravity off, so we also probe a thin slab just under the
+    // feet for any collision.
+    private boolean bodyOnSolidGround(Minecraft client) {
+        LocalPlayer p = client.player;
+        if (p == null || client.level == null) return false;
+        if (p.onGround()) return true;
+        AABB bb = p.getBoundingBox();
+        AABB probe = new AABB(bb.minX + 0.001, bb.minY - 0.10, bb.minZ + 0.001,
+                              bb.maxX - 0.001, bb.minY,         bb.maxZ - 0.001);
+        return isTouchingAABB(client, probe);
     }
 
     private Vec3 clampArm(Vec3 hand, Vec3 head) {

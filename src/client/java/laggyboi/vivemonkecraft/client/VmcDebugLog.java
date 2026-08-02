@@ -48,11 +48,67 @@ public final class VmcDebugLog {
                 writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                 writer.write("\n==== ViveMonkeCraft debug session " + LocalDateTime.now() + " ====\n");
+                // Full one-shot dump of what the mod is running on and configured with,
+                // so a shared log is self-contained for debugging (no need to ask the
+                // user which versions / mods / settings they had).
+                writer.write(environmentDump());
             }
             writer.write("[" + LocalDateTime.now().format(TF) + "] " + msg + "\n");
             writer.flush();
         } catch (Throwable t) {
             failed = true;   // never let logging break gameplay
         }
+    }
+
+    // Builds the session's environment/dependency/config dump. Best-effort: any
+    // failure just yields a short note so it can never break the log session.
+    private static String environmentDump() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            FabricLoader loader = FabricLoader.getInstance();
+            sb.append("---- environment ----\n");
+            sb.append("  os      = ").append(System.getProperty("os.name"))
+              .append(' ').append(System.getProperty("os.version")).append('\n');
+            sb.append("  java    = ").append(System.getProperty("java.version")).append('\n');
+            sb.append("  loader  = ").append(modVersion(loader, "fabricloader")).append('\n');
+            sb.append("  mc      = ").append(modVersion(loader, "minecraft")).append('\n');
+            sb.append("  vmc     = ").append(modVersion(loader, "vivemonkecraft")).append('\n');
+
+            sb.append("---- key dependencies ----\n");
+            for (String id : new String[]{"vivecraft", "fabric-api", "fabric",
+                                          "cloth-config", "cloth-config2", "modmenu"}) {
+                sb.append("  ").append(pad(id)).append(" = ")
+                  .append(loader.isModLoaded(id) ? modVersion(loader, id) : "ABSENT").append('\n');
+            }
+
+            sb.append("---- all loaded mods (").append(loader.getAllMods().size()).append(") ----\n");
+            loader.getAllMods().stream()
+                  .map(c -> c.getMetadata())
+                  .sorted(java.util.Comparator.comparing(m -> m.getId()))
+                  .forEach(m -> sb.append("  ").append(m.getId()).append(' ')
+                                  .append(m.getVersion().getFriendlyString()).append('\n'));
+
+            sb.append("---- active config ----\n");
+            java.util.Map<String, Object> snap = MovementConfig.snapshot();
+            snap.keySet().stream().sorted()
+                .forEach(k -> sb.append("  ").append(k).append(" = ").append(snap.get(k)).append('\n'));
+
+            sb.append("---- end environment ----\n");
+        } catch (Throwable t) {
+            sb.append("  (environment dump failed: ").append(t).append(")\n");
+        }
+        return sb.toString();
+    }
+
+    private static String modVersion(FabricLoader loader, String id) {
+        return loader.getModContainer(id)
+                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                .orElse("absent");
+    }
+
+    private static String pad(String s) {
+        StringBuilder b = new StringBuilder(s);
+        while (b.length() < 12) b.append(' ');
+        return b.toString();
     }
 }

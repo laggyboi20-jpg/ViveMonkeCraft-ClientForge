@@ -46,7 +46,8 @@ public final class MovementConfig {
     public static double handReachMultiplier = 2.5;
 
     // Radius of the hand "touch" sphere (blocks). Bigger = easier to grab.
-    public static double handRadius = 0.12;
+    // 0.10 feels the smoothest (a smaller sphere snags the ground less).
+    public static double handRadius = 0.10;
 
     // PUSH SPEED — how strongly your hand SWING becomes body movement.
     // 1.0 = 1:1 (move exactly as far as you swing), 2.0 = twice as much (default),
@@ -285,6 +286,38 @@ public final class MovementConfig {
     // true/false.
     public static boolean allowTeleport = false;
 
+    // =====================================================================
+    // 1.0.0.3 FEATURES
+    // =====================================================================
+
+    // SURVIVE FATAL FALL — a "last stand": if a fall would KILL you and you were at
+    // FULL health when you hit the ground, instead of dying you drop to half a heart
+    // and lose 3 food. Because you land at half a heart (not full) it can't chain —
+    // it only saves you again once you've healed all the way back up. true/false.
+    // (Singleplayer / LAN host only from the client; a dedicated server needs the
+    // companion mod to enforce it, like fall-damage suppression already does.)
+    public static boolean surviveFatalFall = true;
+
+    // DISABLE FALL DAMAGE — turn OFF fall damage entirely while the mod is on. Takes
+    // precedence over surviveFatalFall (no damage at all, so nothing to survive).
+    // true/false. (Same singleplayer/LAN caveat as above.)
+    public static boolean disableFallDamage = false;
+
+    // SINGLE FLOOR GRIP — only ONE hand may grip the FLOOR at a time. Walking with the
+    // gorilla gait means alternating hands; if a trailing hand lightly brushes the
+    // ground it anchors and stops you dead. With this on, while one hand holds the
+    // floor the other hand's floor-touch is ignored (walls/climbing are unaffected —
+    // two hands still work there), so walking flows without snagging. true/false.
+    public static boolean singleFloorGrip = true;
+
+    // GROUNDED GRIP RELEASE — fixes being wedged after jumping straight up with a hand
+    // held in place: when you land back on the ground with a floor-anchored hand, the
+    // anchor keeps dragging you down into the floor and you can't walk until you pull
+    // the hand back. With this on, a FLOOR grip auto-releases once you're standing on
+    // the ground again and no longer pulling yourself anywhere, so you're free to move
+    // without retracting your hand. Walls/climbing are unaffected. true/false.
+    public static boolean groundedGripRelease = true;
+
     // ACTIVE PRESET — the name of the last preset applied from the Mod Menu screen
     // (or "Default" on first run). The ModMenu reset buttons resolve their target
     // values from THIS preset, and the screen shows it so players know what "reset"
@@ -360,7 +393,7 @@ public final class MovementConfig {
         velocityLimit       = 0.05;
         jumpMultiplier      = 1.8;
         maxArmLength        = 3.0;
-        handRadius          = 0.12;
+        handRadius          = 0.10;
         hitboxHeightScale   = 0.25;
         stepAssist          = true;
         stepTeleport        = true;
@@ -380,6 +413,10 @@ public final class MovementConfig {
         vanillaIceFriction  = false;
         debugLogging        = false;
         allowTeleport       = false;
+        surviveFatalFall    = true;
+        disableFallDamage   = false;
+        singleFloorGrip     = true;
+        groundedGripRelease = true;
         // Fields the flavour presets don't individually tune — set here too so
         // "Default" is a COMPLETE spec and every ModMenu reset button resolves to a
         // real value (not "whatever it happened to be").
@@ -495,6 +532,10 @@ public final class MovementConfig {
                     debugLogging        = parseB(p, "debugLogging",        debugLogging);
                     allowTeleport       = parseB(p, "allowTeleport",       allowTeleport);
                     clampHandModels     = parseB(p, "clampHandModels",     clampHandModels);
+                    surviveFatalFall    = parseB(p, "surviveFatalFall",    surviveFatalFall);
+                    disableFallDamage   = parseB(p, "disableFallDamage",   disableFallDamage);
+                    singleFloorGrip     = parseB(p, "singleFloorGrip",     singleFloorGrip);
+                    groundedGripRelease = parseB(p, "groundedGripRelease", groundedGripRelease);
                     activePreset        = p.getProperty("activePreset", activePreset).trim();
                 }
             } else {
@@ -704,6 +745,17 @@ public final class MovementConfig {
             sb.append("debugLogging=").append(debugLogging).append("\n\n");
             sb.append("# Keep Vivecraft teleport usable while the mod is on (it desyncs physics). true/false.\n");
             sb.append("allowTeleport=").append(allowTeleport).append("\n\n");
+
+            sb.append("# Survive an otherwise-fatal fall at half a heart (−3 food) if you were at full\n");
+            sb.append("# health. Self-limiting (can't chain). true/false.\n");
+            sb.append("surviveFatalFall=").append(surviveFatalFall).append("\n\n");
+            sb.append("# Disable fall damage entirely while the mod is on. Overrides surviveFatalFall. true/false.\n");
+            sb.append("disableFallDamage=").append(disableFallDamage).append("\n\n");
+            sb.append("# Only one hand can grip the FLOOR at a time — smoother walking (walls unaffected). true/false.\n");
+            sb.append("singleFloorGrip=").append(singleFloorGrip).append("\n\n");
+            sb.append("# Auto-release a floor grip once you're grounded again so you're not wedged after\n");
+            sb.append("# jumping straight up with your hand held in place. true/false.\n");
+            sb.append("groundedGripRelease=").append(groundedGripRelease).append("\n\n");
 
             sb.append("# The preset the Mod Menu 'reset' buttons revert to (set by picking a preset\n");
             sb.append("# in the config screen). One of: Default, tutorial, Long Arms, Zero Gravity,\n");

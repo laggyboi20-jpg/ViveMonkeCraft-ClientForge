@@ -6,6 +6,7 @@
   "client": [
     "ArmorLayerMonkeMixin",
     "EntitySuffocationMixin",
+    "FallDamageMixin",
     "InteractTrackerMixin",
     "TeleportTrackerMixin",
     "PlayerHitboxMixin",
