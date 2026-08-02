@@ -172,6 +172,14 @@ public final class MovementConfig {
     //           scaled by pullStrength; stickiness settings apply).
     public static boolean gtPhysics = true;
 
+    // EXPERIMENTAL — HYBRID PHYSICS: best of both. FLOOR grips use the GT anchor
+    // mechanic (which handles standing/pushing off the ground well and never wedges
+    // you), while WALLS, WALKING, JUMPING and all velocity/throw use the legacy
+    // speed-based system (whose momentum and jumping feel good). Takes precedence over
+    // gtPhysics when on. Fixes the legacy "wedged after a straight-up jump" bug because
+    // the floor interaction is now GT's. true/false.
+    public static boolean hybridPhysics = false;
+
     // STEP TELEPORT: how step assist lifts you over a ledge while airborne.
     //   true  = place you directly on top of the block (instant, never overshoots)
     //   false = old behaviour: an upward velocity boost arcs you over it
@@ -415,6 +423,7 @@ public final class MovementConfig {
         realMonke           = true;
         modelTorsoPitch     = -120.0;
         gtPhysics           = false;
+        hybridPhysics       = false;
         punchMining         = true;
         punchMiningThreshold = 0.04;
         punchMiningNoTool   = true;
@@ -518,6 +527,7 @@ public final class MovementConfig {
                     cameraStabStrength  = parseD(p, "cameraStabStrength",  cameraStabStrength);
                     gripSmoothing       = parseD(p, "gripSmoothing",       gripSmoothing);
                     gtPhysics           = parseB(p, "gtPhysics",           gtPhysics);
+                    hybridPhysics       = parseB(p, "hybridPhysics",       hybridPhysics);
                     stepTeleport        = parseB(p, "stepTeleport",        stepTeleport);
                     gtDragGain          = parseD(p, "gtDragGain",          gtDragGain);
                     gtUnstickDistance   = parseD(p, "gtUnstickDistance",   gtUnstickDistance);
@@ -684,7 +694,9 @@ public final class MovementConfig {
             sb.append("#           spot it touches and your body is dragged 1:1 so the hand stays\n");
             sb.append("#           planted. pullStrength + stickiness settings are ignored.\n");
             sb.append("#   false = older speed-based model (swing speed x pullStrength).\n");
-            sb.append("gtPhysics=").append(gtPhysics).append("\n\n");
+            sb.append("gtPhysics=").append(gtPhysics).append("\n");
+            sb.append("# EXPERIMENTAL hybrid: GT anchor physics for FLOOR grips, legacy for walls/walking/jumping. Overrides gtPhysics. true/false.\n");
+            sb.append("hybridPhysics=").append(hybridPhysics).append("\n\n");
 
             sb.append("# STEP TELEPORT: how step assist lifts you over ledges while airborne.\n");
             sb.append("#   true  = place you directly on top of the block (instant)\n");

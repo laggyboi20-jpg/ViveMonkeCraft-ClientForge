@@ -420,6 +420,15 @@ public class ModMenuIntegration implements ModMenuApi {
                         Component.literal("its quite bad if you ask me"))
                 .setSaveConsumer(v -> MovementConfig.gtPhysics = v).build());
 
+        gtPage.addEntry(eb.startBooleanToggle(Component.literal("Hybrid physics (experimental)"), MovementConfig.hybridPhysics)
+                .setDefaultValue(pB("hybridPhysics"))
+                .setTooltip(
+                        Component.literal("Best of both: FLOOR grips use the GT anchor mechanic (good ground"),
+                        Component.literal("interaction, never wedges), while WALLS, WALKING, JUMPING and all"),
+                        Component.literal("velocity use the legacy speed model (good momentum + jumping)."),
+                        Component.literal("Overrides 'GT physics' when on."))
+                .setSaveConsumer(v -> MovementConfig.hybridPhysics = v).build());
+
         gtPage.addEntry(eb.startDoubleField(Component.literal("Push strength"), MovementConfig.gtPushStrength)
                 .setDefaultValue(pD("gtPushStrength")).setMin(0.1).setMax(100.0)
                 .setTooltip(
