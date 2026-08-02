@@ -302,6 +302,15 @@ public class ModMenuIntegration implements ModMenuApi {
                 Component.literal("Purely visual — physics always uses your real hand."))
             .setSaveConsumer(v -> MovementConfig.clampHandModels = v).build());
 
+        visual.addEntry(eb.startBooleanToggle(Component.literal("Hand surface collision (free hands)"), MovementConfig.handSurfaceCollision)
+            .setDefaultValue(pB("handSurfaceCollision"))
+            .setTooltip(
+                Component.literal("Also keeps the hand model out of blocks when NOT gripping, so the"),
+                Component.literal("non-pushing hand rests ON the ground instead of sinking into it."),
+                Component.literal("Swept last->current so fast swings/falls don't bury a hand."),
+                Component.literal("Needs 'Clamp hand models'. Purely visual."))
+            .setSaveConsumer(v -> MovementConfig.handSurfaceCollision = v).build());
+
         visual.addEntry(eb.startBooleanToggle(Component.literal("Real Monke (gorilla size)"), MovementConfig.realMonke)
             .setDefaultValue(pB("realMonke"))
             .setTooltip(

@@ -239,6 +239,15 @@ public final class MovementConfig {
     // uses the real tracked hand. true/false.
     public static boolean clampHandModels = true;
 
+    // HAND SURFACE COLLISION — keep Vivecraft's hand MODEL from sinking into blocks
+    // even when NOT gripping. Every tick each free hand is resolved out of any block
+    // it's inside (pushed to the nearest surface) and swept last->current so a fast
+    // swing/fall that tunnels a hand through a block is stopped at the entry face.
+    // This is what keeps the non-pushing hand's model resting ON the ground instead of
+    // buried in it. Purely visual (physics still uses the real tracked hand); requires
+    // clampHandModels. true/false.
+    public static boolean handSurfaceCollision = true;
+
     // EXPERIMENTAL — ICE FLOOR WALL LOGIC: treat grabbing an ICE FLOOR exactly
     // like an ice WALL (gravity on, no anchor glue, pure push-off momentum)
     // instead of the normal slippery-floor handling. Legacy physics only.
@@ -432,6 +441,7 @@ public final class MovementConfig {
         gtPushStrength      = 1.0;
         cameraHeightOffset  = 0.0;
         clampHandModels     = true;
+        handSurfaceCollision = true;
         iceFloorWallLogic   = false;
         modelTorsoOffsetY   = 0.0;
         modelTorsoScaleY    = 0.75;
@@ -532,6 +542,7 @@ public final class MovementConfig {
                     debugLogging        = parseB(p, "debugLogging",        debugLogging);
                     allowTeleport       = parseB(p, "allowTeleport",       allowTeleport);
                     clampHandModels     = parseB(p, "clampHandModels",     clampHandModels);
+                    handSurfaceCollision = parseB(p, "handSurfaceCollision", handSurfaceCollision);
                     surviveFatalFall    = parseB(p, "surviveFatalFall",    surviveFatalFall);
                     disableFallDamage   = parseB(p, "disableFallDamage",   disableFallDamage);
                     singleFloorGrip     = parseB(p, "singleFloorGrip",     singleFloorGrip);
@@ -723,7 +734,9 @@ public final class MovementConfig {
             sb.append("# CLAMP HAND MODELS: while gripping, draw the Vivecraft hand model ON the\n");
             sb.append("# block surface instead of inside it (like Gorilla Tag's hand followers).\n");
             sb.append("# Purely visual - physics always uses the real hand. true/false.\n");
-            sb.append("clampHandModels=").append(clampHandModels).append("\n\n");
+            sb.append("clampHandModels=").append(clampHandModels).append("\n");
+            sb.append("# Keep the non-gripping hand model out of blocks (rests on the surface, never sinks in). true/false.\n");
+            sb.append("handSurfaceCollision=").append(handSurfaceCollision).append("\n\n");
 
             sb.append("# EXPERIMENTAL - ICE FLOOR WALL LOGIC: treat ice FLOOR grabs exactly like\n");
             sb.append("# ice WALLS (gravity on, no anchor glue, pure push-off). Legacy physics\n");
