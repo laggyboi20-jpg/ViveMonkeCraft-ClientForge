@@ -496,9 +496,9 @@ public class ModMenuIntegration implements ModMenuApi {
         gameplay.addEntry(eb.startBooleanToggle(Component.literal("Survive fatal falls"), MovementConfig.surviveFatalFall)
                 .setDefaultValue(pB("surviveFatalFall"))
                 .setTooltip(
-                        Component.literal("A last stand: a fall that would KILL you leaves you at half your"),
-                        Component.literal("hearts (minus 3 food) instead — but only if you were at FULL health."),
-                        Component.literal("Landing at half health means it can't chain until you heal back up."),
+                        Component.literal("A last stand: a fall that would KILL you leaves you at 1 HP (half a"),
+                        Component.literal("heart, minus 3 food) instead — but only if you were at FULL health."),
+                        Component.literal("Landing near-death means it can't chain until you heal back up."),
                         Component.literal("Singleplayer / LAN host only from the client."))
                 .setSaveConsumer(v -> MovementConfig.surviveFatalFall = v).build());
 

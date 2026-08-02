@@ -291,8 +291,8 @@ public final class MovementConfig {
     // =====================================================================
 
     // SURVIVE FATAL FALL — a "last stand": if a fall would KILL you and you were at
-    // FULL health when you hit the ground, instead of dying you drop to half a heart
-    // and lose 3 food. Because you land at half a heart (not full) it can't chain —
+    // FULL health when you hit the ground, instead of dying you drop to 1 HP (half a
+    // heart, near-death) and lose 3 food. Because you land below full it can't chain —
     // it only saves you again once you've healed all the way back up. true/false.
     // (Singleplayer / LAN host only from the client; a dedicated server needs the
     // companion mod to enforce it, like fall-damage suppression already does.)
@@ -746,7 +746,7 @@ public final class MovementConfig {
             sb.append("# Keep Vivecraft teleport usable while the mod is on (it desyncs physics). true/false.\n");
             sb.append("allowTeleport=").append(allowTeleport).append("\n\n");
 
-            sb.append("# Survive an otherwise-fatal fall at half a heart (−3 food) if you were at full\n");
+            sb.append("# Survive an otherwise-fatal fall at 1 HP / half a heart (−3 food) if you were at full\n");
             sb.append("# health. Self-limiting (can't chain). true/false.\n");
             sb.append("surviveFatalFall=").append(surviveFatalFall).append("\n\n");
             sb.append("# Disable fall damage entirely while the mod is on. Overrides surviveFatalFall. true/false.\n");

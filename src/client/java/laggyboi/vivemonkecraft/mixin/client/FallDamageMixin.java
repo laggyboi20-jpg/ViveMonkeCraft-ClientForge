@@ -81,10 +81,9 @@ public abstract class FallDamageMixin {
             float health = le.getHealth();
             boolean full = health >= le.getMaxHealth() - 0.001f;
             if (full && dmg >= health) {
-                // LAST STAND: cancel the fatal damage, leave half the hearts and drain
-                // 3 food. "Half a life" = half of max health; tweak the 0.5f if a
-                // near-death (half a heart) feel is preferred instead.
-                le.setHealth(le.getMaxHealth() * 0.5f);
+                // LAST STAND: cancel the fatal damage, leave you at 1 HP (half a heart,
+                // near-death) and drain 3 food.
+                le.setHealth(1.0f);
                 FoodData food = ((Player) self).getFoodData();
                 food.setFoodLevel(Math.max(0, food.getFoodLevel() - 6)); // 3 food icons
                 cir.setReturnValue(false);
