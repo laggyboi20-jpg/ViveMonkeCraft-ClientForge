@@ -7,7 +7,6 @@ import java.util.Map;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import laggyboi.vivemonkecraft.client.platform.VmcPlatform;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -64,22 +63,11 @@ public final class VmcConfigScreen {
     // separate classes; everything below this point — the whole screen, all the
     // pages and all the presets — is shared verbatim across every loader branch.
 
-    /**
-     * Whether Cloth Config is installed. The screen is built with Cloth; if it's
-     * absent the loader entry must NOT offer a screen — that way the game never
-     * crashes when you click the config button, you just don't get a screen (use
-     * the .properties file / keybind / /vmc instead).
-     */
-    public static boolean clothPresent() {
-        // All three spellings on purpose: Cloth's mod id is "cloth-config" (and
-        // historically "cloth-config2") on Fabric, but "cloth_config" on
-        // Forge/NeoForge, whose mod ids can't contain hyphens. Checking all of them
-        // is what keeps this file byte-identical across the loader branches — so
-        // don't "tidy" it down to the one spelling this branch happens to need.
-        return VmcPlatform.isModLoaded("cloth-config")
-            || VmcPlatform.isModLoaded("cloth-config2")
-            || VmcPlatform.isModLoaded("cloth_config");
-    }
+    // NOTE: the "is Cloth installed?" check deliberately does NOT live here — it is
+    // in VmcClothConfig. Touching any static member of THIS class forces the JVM to
+    // verify it, which resolves the Cloth types in the signatures below and throws
+    // NoClassDefFoundError when Cloth is absent. Callers must gate on
+    // VmcClothConfig.present() before referencing this class at all.
 
     /** Build the config screen. "parent" is the screen to return to on Save/Cancel. */
     public static Screen create(Screen parent) {
