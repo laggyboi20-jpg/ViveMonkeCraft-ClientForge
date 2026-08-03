@@ -1,6 +1,5 @@
 package laggyboi.vivemonkecraft.mixin.client;
 
-import laggyboi.vivemonkecraft.client.MovementConfig;
 import laggyboi.vivemonkecraft.client.VivemonkecraftClient;
 import laggyboi.vivemonkecraft.client.VrHandClamp;
 import net.minecraft.world.phys.Vec3;
@@ -147,21 +146,20 @@ public class VrCameraHeightMixin {
     }
 
     // How far the VR view is currently dropped (blocks). 0 = no drop.
+    // Lives in VrViewDrop so the interaction mixins drop the gameplay snapshot by
+    // EXACTLY this much — if the two ever disagree, what you break stops matching
+    // what you see.
     @org.spongepowered.asm.mixin.Unique
     private static double vmc$currentDrop() {
-        if (!VivemonkecraftClient.isEnabled()) return 0.0;
-        // No drop while riding (boat/minecart/horse) or elytra-flying: the seat/flight
-        // already sets your eye height, so dropping it 0.9 would sink the camera down
-        // INTO the vehicle. Locomotion is suspended in those states anyway.
-        net.minecraft.client.player.LocalPlayer p = net.minecraft.client.Minecraft.getInstance().player;
-        if (p != null && (p.isPassenger() || p.isFallFlying())) return 0.0;
-        return MovementConfig.realMonke ? 0.9 : MovementConfig.cameraHeightOffset;
+        return laggyboi.vivemonkecraft.client.VrViewDrop.currentDrop();
     }
 
     // NOTE: an earlier attempt also lowered the GAMEPLAY snapshots (vrdata_world_pre
-    // / _post) to make roomscale block-breaking match the lowered view. It shoved the
-    // player ~0.9 into the floor (Vivecraft repositions the body to those snapshots),
-    // so it was reverted. The block-break-vs-view mismatch is left unfixed for now.
+    // / _post) globally to make roomscale block-breaking match the lowered view. It
+    // shoved the player ~0.9 into the floor (Vivecraft repositions the body to those
+    // snapshots), so it was reverted. The working form is the SCOPED drop in
+    // SwingTrackerMixin / InteractTrackerMixin — only for the duration of the tracker
+    // call, so movement still reads the true origin.
 
     // Stashes the hand's raw tracked world position, then (if a clamp point is
     // active) replaces the pose with an identical one positioned at the surface.
