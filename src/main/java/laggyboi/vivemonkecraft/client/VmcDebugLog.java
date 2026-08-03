@@ -1,6 +1,6 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +42,7 @@ public final class VmcDebugLog {
         if (!MovementConfig.debugLogging || failed) return;
         try {
             if (writer == null) {
-                Path dir = FabricLoader.getInstance().getGameDir().resolve("logs");
+                Path dir = FMLPaths.GAMEDIR.get().resolve("logs");
                 Files.createDirectories(dir);
                 Path file = dir.resolve("vivemonkecraft-debug.log");
                 writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,

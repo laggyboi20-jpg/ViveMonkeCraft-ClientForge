@@ -2,11 +2,12 @@ package laggyboi.vivemonkecraft.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import org.joml.Matrix4f;
 
 // =====================================================================
@@ -14,9 +15,9 @@ import org.joml.Matrix4f;
 // =====================================================================
 //
 // Replaces the old particle hand markers with per-frame geometry drawn
-// directly into the world render pipeline via WorldRenderEvents.
-// Zero particles, zero entities — best performance for Quest standalone,
-// and fully client-side so it works on any server.
+// directly into the world render pipeline. Zero particles, zero entities —
+// best performance for Quest standalone, and fully client-side so it works on
+// any server.
 //
 // Draws an arm line per hand (shoulder → grab point) plus a wireframe cube at
 // the grab point matching the hand hitbox size.
@@ -24,6 +25,12 @@ import org.joml.Matrix4f;
 //
 // State fields are written once per game tick by GorillaLocomotionHandler
 // and read every render frame here.
+//
+// LOADER NOTE: on Fabric this hooked WorldRenderEvents.AFTER_TRANSLUCENT and read
+// the buffer/pose/camera off the WorldRenderContext. NeoForge has no such context,
+// so we hook RenderLevelStageEvent (AFTER_TRANSLUCENT_BLOCKS — the same point in
+// the scene render), take the pose + camera off the event, and grab the shared
+// buffer source straight from Minecraft. Same geometry, same frame timing.
 // =====================================================================
 
 public final class HandMarkerRenderer {
@@ -57,26 +64,28 @@ public final class HandMarkerRenderer {
     }
 
     // =========================================================================
-    // Registration — call once from VivemonkecraftClient.onInitializeClient()
+    // Registration — call once from the mod constructor
     // =========================================================================
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(HandMarkerRenderer::onRender);
+        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class, HandMarkerRenderer::onRender);
     }
 
     // =========================================================================
     // Render callback
     // =========================================================================
 
-    private static void onRender(WorldRenderContext ctx) {
+    private static void onRender(RenderLevelStageEvent event) {
+        // Same point in the scene render Fabric's AFTER_TRANSLUCENT hit.
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         if (!VivemonkecraftClient.isEnabled()) return;
         if (!MovementConfig.showHandMarkers) return;
         if (shoulderMain == null || grabMain == null || shoulderOff == null || grabOff == null) return;
-        if (ctx.consumers() == null) return;
 
-        MultiBufferSource buf   = ctx.consumers();
-        PoseStack         stack = ctx.matrixStack();
-        Vec3              cam   = ctx.camera().getPosition();
+        Minecraft mc = Minecraft.getInstance();
+        MultiBufferSource.BufferSource buf = mc.renderBuffers().bufferSource();
+        PoseStack stack = event.getPoseStack();
+        Vec3      cam   = event.getCamera().getPosition();
 
         VertexConsumer lines = buf.getBuffer(RenderType.lines());
 
@@ -94,9 +103,7 @@ public final class HandMarkerRenderer {
         stack.popPose();
 
         // Flush immediately so the lines are visible this frame.
-        if (buf instanceof MultiBufferSource.BufferSource bs) {
-            bs.endBatch(RenderType.lines());
-        }
+        buf.endBatch(RenderType.lines());
     }
 
     // =========================================================================
