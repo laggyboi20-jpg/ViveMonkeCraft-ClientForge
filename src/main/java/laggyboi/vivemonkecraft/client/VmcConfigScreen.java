@@ -1,13 +1,13 @@
 package laggyboi.vivemonkecraft.client;
 
-import com.terraformersmc.modmenu.api.ConfigScreenFactory;
-import com.terraformersmc.modmenu.api.ModMenuApi;
+
+
 import java.util.List;
 import java.util.Map;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import net.fabricmc.loader.api.FabricLoader;
+import laggyboi.vivemonkecraft.client.platform.VmcPlatform;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -31,7 +31,15 @@ import net.minecraft.network.chat.Component;
 //   shown at the top of the Presets page so it's never a mystery.
 // =====================================================================
 
-public class ModMenuIntegration implements ModMenuApi {
+public final class VmcConfigScreen {
+
+    // GT PHYSICS UI — hidden. Legacy (speed-based) physics is the one supported
+    // motor, so the whole "GT Physics" page (the anchor-mode toggle + its tuning
+    // knobs) is not built and there is no way to switch modes in-game. The GT
+    // engine itself is untouched in GorillaLocomotionHandler and still reads
+    // MovementConfig.gtPhysics, which can only be set by hand-editing
+    // config/vivemonkecraft.properties. Flip this to true to bring the page back.
+    private static final boolean SHOW_GT_PHYSICS_UI = false;
 
     // The active preset's value for every field, captured at screen-build time.
     // Each entry's setDefaultValue (= what its reset arrow reverts to) reads from here.
@@ -47,18 +55,29 @@ public class ModMenuIntegration implements ModMenuApi {
         return v instanceof Boolean && (Boolean) v;
     }
 
-    @Override
-    public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        // The config screen is built with Cloth Config. If it's NOT installed, return
-        // a factory that makes no screen — that way the game never crashes when you
-        // click the config button; you just won't get a screen (use the file / keybind
-        // / /vmc instead). Install Cloth Config to enable this screen.
-        if (!FabricLoader.getInstance().isModLoaded("cloth-config")
-            && !FabricLoader.getInstance().isModLoaded("cloth-config2")) {
-            return parent -> null;
-        }
-        // "parent" is the Mods screen we came from; we return to it on Save/Cancel.
-        return parent -> buildScreen(parent);
+    // -----------------------------------------------------------------------
+    // Loader-neutral entry points
+    // -----------------------------------------------------------------------
+    //
+    // Each loader has its own way of advertising a config screen (Mod Menu on
+    // Fabric, IConfigScreenFactory on NeoForge/Forge). Those entries are tiny
+    // separate classes; everything below this point — the whole screen, all the
+    // pages and all the presets — is shared verbatim across every loader branch.
+
+    /**
+     * Whether Cloth Config is installed. The screen is built with Cloth; if it's
+     * absent the loader entry must NOT offer a screen — that way the game never
+     * crashes when you click the config button, you just don't get a screen (use
+     * the .properties file / keybind / /vmc instead).
+     */
+    public static boolean clothPresent() {
+        return VmcPlatform.isModLoaded("cloth-config")
+            || VmcPlatform.isModLoaded("cloth-config2");
+    }
+
+    /** Build the config screen. "parent" is the screen to return to on Save/Cancel. */
+    public static Screen create(Screen parent) {
+        return new VmcConfigScreen().buildScreen(parent);
     }
 
     private Screen buildScreen(Screen parent) {
@@ -408,55 +427,53 @@ public class ModMenuIntegration implements ModMenuApi {
         // ====================================================================
         // GT PHYSICS — everything about the anchor-mode port of the official
         // GorillaLocomotion algorithm lives on its own page.
+        //
+        // HIDDEN (SHOW_GT_PHYSICS_UI = false): legacy physics is the supported
+        // motor, so this page isn't built at all and GT can't be switched on from
+        // in-game. The engine and every gt* setting still exist — see the field
+        // comment at the top of this class.
         // ====================================================================
-        ConfigCategory gtPage = builder.getOrCreateCategory(Component.literal("GT Physics"));
+        if (SHOW_GT_PHYSICS_UI) {
+            ConfigCategory gtPage = builder.getOrCreateCategory(Component.literal("GT Physics"));
 
-        gtPage.addEntry(eb.startBooleanToggle(Component.literal("GT physics beta (anchor mode)"), MovementConfig.gtPhysics)
-                .setDefaultValue(pB("gtPhysics"))
-                .setTooltip(
-                        Component.literal("ON = official GorillaLocomotion algorithm: hands ANCHOR to the spot"),
-                        Component.literal("they touch and your body is dragged 1:1 (Push speed + stickiness ignored)."),
-                        Component.literal("OFF = older speed-based model (swing speed × Push speed)."),
-                        Component.literal("its quite bad if you ask me"))
-                .setSaveConsumer(v -> MovementConfig.gtPhysics = v).build());
+            gtPage.addEntry(eb.startBooleanToggle(Component.literal("GT physics beta (anchor mode)"), MovementConfig.gtPhysics)
+                    .setDefaultValue(pB("gtPhysics"))
+                    .setTooltip(
+                            Component.literal("ON = official GorillaLocomotion algorithm: hands ANCHOR to the spot"),
+                            Component.literal("they touch and your body is dragged 1:1 (Push speed + stickiness ignored)."),
+                            Component.literal("OFF = older speed-based model (swing speed × Push speed)."),
+                            Component.literal("its quite bad if you ask me"))
+                    .setSaveConsumer(v -> MovementConfig.gtPhysics = v).build());
 
-        gtPage.addEntry(eb.startBooleanToggle(Component.literal("Hybrid physics (experimental)"), MovementConfig.hybridPhysics)
-                .setDefaultValue(pB("hybridPhysics"))
-                .setTooltip(
-                        Component.literal("Best of both: FLOOR grips use the GT anchor mechanic (good ground"),
-                        Component.literal("interaction, never wedges), while WALLS, WALKING, JUMPING and all"),
-                        Component.literal("velocity use the legacy speed model (good momentum + jumping)."),
-                        Component.literal("Overrides 'GT physics' when on."))
-                .setSaveConsumer(v -> MovementConfig.hybridPhysics = v).build());
+            gtPage.addEntry(eb.startDoubleField(Component.literal("Push strength"), MovementConfig.gtPushStrength)
+                    .setDefaultValue(pD("gtPushStrength")).setMin(0.1).setMax(100.0)
+                    .setTooltip(
+                            Component.literal("Body movement = hand movement × this."),
+                            Component.literal("1.0 = authentic Gorilla Tag 1:1, 2.0 = twice as far, 0.5 = half."))
+                    .setSaveConsumer(v -> MovementConfig.gtPushStrength = v).build());
 
-        gtPage.addEntry(eb.startDoubleField(Component.literal("Push strength"), MovementConfig.gtPushStrength)
-                .setDefaultValue(pD("gtPushStrength")).setMin(0.1).setMax(100.0)
-                .setTooltip(
-                        Component.literal("Body movement = hand movement × this."),
-                        Component.literal("1.0 = authentic Gorilla Tag 1:1, 2.0 = twice as far, 0.5 = half."))
-                .setSaveConsumer(v -> MovementConfig.gtPushStrength = v).build());
+            gtPage.addEntry(eb.startDoubleField(Component.literal("Drag gain"), MovementConfig.gtDragGain)
+                    .setDefaultValue(pD("gtDragGain")).setMin(0.05).setMax(100.0)
+                    .setTooltip(
+                            Component.literal("Fraction of the distance to the anchor corrected each tick."),
+                            Component.literal("0.30 = smooth (default), 0.6 = snappier, 0.2 = softer."),
+                            Component.literal("Keep below 1.0 or grabs overshoot and bounce."))
+                    .setSaveConsumer(v -> MovementConfig.gtDragGain = v).build());
 
-        gtPage.addEntry(eb.startDoubleField(Component.literal("Drag gain"), MovementConfig.gtDragGain)
-                .setDefaultValue(pD("gtDragGain")).setMin(0.05).setMax(100.0)
-                .setTooltip(
-                        Component.literal("Fraction of the distance to the anchor corrected each tick."),
-                        Component.literal("0.30 = smooth (default), 0.6 = snappier, 0.2 = softer."),
-                        Component.literal("Keep below 1.0 or grabs overshoot and bounce."))
-                .setSaveConsumer(v -> MovementConfig.gtDragGain = v).build());
+            gtPage.addEntry(eb.startDoubleField(Component.literal("Unstick distance (blocks)"), MovementConfig.gtUnstickDistance)
+                    .setDefaultValue(pD("gtUnstickDistance")).setMin(0.2).setMax(3.0)
+                    .setTooltip(
+                            Component.literal("How far a hand may stray from its anchor before the grip releases."),
+                            Component.literal("Official Gorilla Tag uses 1.0."))
+                    .setSaveConsumer(v -> MovementConfig.gtUnstickDistance = v).build());
 
-        gtPage.addEntry(eb.startDoubleField(Component.literal("Unstick distance (blocks)"), MovementConfig.gtUnstickDistance)
-                .setDefaultValue(pD("gtUnstickDistance")).setMin(0.2).setMax(3.0)
-                .setTooltip(
-                        Component.literal("How far a hand may stray from its anchor before the grip releases."),
-                        Component.literal("Official Gorilla Tag uses 1.0."))
-                .setSaveConsumer(v -> MovementConfig.gtUnstickDistance = v).build());
-
-        gtPage.addEntry(eb.startDoubleField(Component.literal("Ice slip"), MovementConfig.gtIceSlip)
-                .setDefaultValue(pD("gtIceSlip")).setMin(0.0).setMax(1.0)
-                .setTooltip(
-                        Component.literal("How fast an anchor drifts toward the hand on ice."),
-                        Component.literal("0 = ice grips like stone, 0.95 = push off only (default)."))
-                .setSaveConsumer(v -> MovementConfig.gtIceSlip = v).build());
+            gtPage.addEntry(eb.startDoubleField(Component.literal("Ice slip"), MovementConfig.gtIceSlip)
+                    .setDefaultValue(pD("gtIceSlip")).setMin(0.0).setMax(1.0)
+                    .setTooltip(
+                            Component.literal("How fast an anchor drifts toward the hand on ice."),
+                            Component.literal("0 = ice grips like stone, 0.95 = push off only (default)."))
+                    .setSaveConsumer(v -> MovementConfig.gtIceSlip = v).build());
+        }
 
         //Experimental page For Experimental stuff
         ConfigCategory Experimental = builder.getOrCreateCategory(Component.literal("Experimental"));

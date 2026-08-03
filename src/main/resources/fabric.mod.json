@@ -12,14 +12,8 @@
   "icon": "assets/vivemonkecraft/icon.png",
   "environment": "client",
   "entrypoints": {
-    "fabric-datagen": [
-      "laggyboi.vivemonkecraft.client.VivemonkecraftDataGenerator"
-    ],
     "client": [
-      "laggyboi.vivemonkecraft.client.VivemonkecraftClient"
-    ],
-    "main": [
-      "laggyboi.vivemonkecraft.Vivemonkecraft"
+      "laggyboi.vivemonkecraft.client.platform.VmcBootstrap"
     ],
     "modmenu": [
       "laggyboi.vivemonkecraft.client.ModMenuIntegration"

@@ -1,6 +1,6 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.loader.api.FabricLoader;
+import laggyboi.vivemonkecraft.client.platform.VmcPlatform;
 
 import java.io.Reader;
 import java.nio.file.Files;
@@ -168,17 +168,15 @@ public final class MovementConfig {
     //           so the hand stays planted (position-based, like real Gorilla Tag).
     //           pullStrength is ignored in this mode (1:1 by definition);
     //           wall/floor stickiness are ignored too (anchors always hold, ice slips).
-    //   false = the older speed-based model (body velocity follows hand swing speed
-    //           scaled by pullStrength; stickiness settings apply).
-    public static boolean gtPhysics = true;
-
-    // EXPERIMENTAL — HYBRID PHYSICS: best of both. FLOOR grips use the GT anchor
-    // mechanic (which handles standing/pushing off the ground well and never wedges
-    // you), while WALLS, WALKING, JUMPING and all velocity/throw use the legacy
-    // speed-based system (whose momentum and jumping feel good). Takes precedence over
-    // gtPhysics when on. Fixes the legacy "wedged after a straight-up jump" bug because
-    // the floor interaction is now GT's. true/false.
-    public static boolean hybridPhysics = false;
+    //   false = the LEGACY speed-based model (body velocity follows hand swing speed
+    //           scaled by pullStrength; stickiness settings apply). THIS IS THE MODE.
+    //
+    // NOTE: GT anchor mode is no longer exposed in-game — the toggle (and its whole
+    // tuning page) is hidden in ModMenuIntegration and legacy is the one supported
+    // motor. The engine below is left fully intact and still honours this flag, so it
+    // can be re-enabled for testing by hand-editing config/vivemonkecraft.properties
+    // (or by flipping ModMenuIntegration.SHOW_GT_PHYSICS_UI back to true).
+    public static boolean gtPhysics = false;
 
     // STEP TELEPORT: how step assist lifts you over a ledge while airborne.
     //   true  = place you directly on top of the block (instant, never overshoots)
@@ -391,7 +389,7 @@ public final class MovementConfig {
     // -----------------------------------------------------------------------
 
     private static Path configPath() {
-        return FabricLoader.getInstance().getConfigDir().resolve("vivemonkecraft.properties");
+        return VmcPlatform.configDir().resolve("vivemonkecraft.properties");
     }
 
     // Applies the "Default" preset — the curated good-starting config. Lives HERE
@@ -423,7 +421,6 @@ public final class MovementConfig {
         realMonke           = true;
         modelTorsoPitch     = -120.0;
         gtPhysics           = false;
-        hybridPhysics       = false;
         punchMining         = true;
         punchMiningThreshold = 0.04;
         punchMiningNoTool   = true;
@@ -527,7 +524,6 @@ public final class MovementConfig {
                     cameraStabStrength  = parseD(p, "cameraStabStrength",  cameraStabStrength);
                     gripSmoothing       = parseD(p, "gripSmoothing",       gripSmoothing);
                     gtPhysics           = parseB(p, "gtPhysics",           gtPhysics);
-                    hybridPhysics       = parseB(p, "hybridPhysics",       hybridPhysics);
                     stepTeleport        = parseB(p, "stepTeleport",        stepTeleport);
                     gtDragGain          = parseD(p, "gtDragGain",          gtDragGain);
                     gtUnstickDistance   = parseD(p, "gtUnstickDistance",   gtUnstickDistance);
@@ -689,14 +685,15 @@ public final class MovementConfig {
             sb.append("# The throw/launch on release is unaffected (uses raw velocity).\n");
             sb.append("gripSmoothing=").append(gripSmoothing).append("\n\n");
 
-            sb.append("# GORILLA TAG PHYSICS (anchor mode):\n");
+            sb.append("# GORILLA TAG PHYSICS (anchor mode) - HIDDEN / UNSUPPORTED:\n");
             sb.append("#   true  = official GorillaLocomotion algorithm: a hand ANCHORS to the\n");
             sb.append("#           spot it touches and your body is dragged 1:1 so the hand stays\n");
             sb.append("#           planted. pullStrength + stickiness settings are ignored.\n");
-            sb.append("#   false = older speed-based model (swing speed x pullStrength).\n");
-            sb.append("gtPhysics=").append(gtPhysics).append("\n");
-            sb.append("# EXPERIMENTAL hybrid: GT anchor physics for FLOOR grips, legacy for walls/walking/jumping. Overrides gtPhysics. true/false.\n");
-            sb.append("hybridPhysics=").append(hybridPhysics).append("\n\n");
+            sb.append("#   false = LEGACY speed-based model (swing speed x pullStrength). DEFAULT.\n");
+            sb.append("# No longer shown in the in-game config screen - legacy is the supported\n");
+            sb.append("# motor. The GT engine is still in the mod, so you can flip this by hand\n");
+            sb.append("# to test it, but it gets no tuning UI and no support.\n");
+            sb.append("gtPhysics=").append(gtPhysics).append("\n\n");
 
             sb.append("# STEP TELEPORT: how step assist lifts you over ledges while airborne.\n");
             sb.append("#   true  = place you directly on top of the block (instant)\n");

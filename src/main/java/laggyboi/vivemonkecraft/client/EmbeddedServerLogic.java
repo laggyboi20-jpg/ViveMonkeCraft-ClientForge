@@ -1,8 +1,7 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import laggyboi.vivemonkecraft.client.platform.VmcEvents;
+import laggyboi.vivemonkecraft.client.platform.VmcNet;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Set;
@@ -42,55 +41,50 @@ public final class EmbeddedServerLogic {
 
     private EmbeddedServerLogic() {}
 
+    // Join/disconnect only — the two PAYLOAD handlers below are wired up by
+    // VivemonkecraftClient's VmcNet.register block (the loader needs the payload
+    // type and its handler registered together).
     public static void register() {
+
         // Authorize every joiner + replay the current monke-model set to them.
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+        VmcEvents.onServerJoin((player, server) -> {
             // Unrestricted config — a LAN game among friends needs no caps. (Wire
             // format must match ServerConfigPayload: modEnabled, then 10 doubles.)
-            ServerPlayNetworking.send(handler.player, new ServerConfigPayload(
+            VmcNet.sendToPlayer(player, new ServerConfigPayload(
                     true,        // modEnabled
                     0.0,         // maxJumpSpeed (no hard cap)
                     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,   // allowances unset
                     -1.0, -1.0)); // gravity / air-friction minimums unset
 
             for (UUID u : monkeModelPlayers) {
-                ServerPlayNetworking.send(handler.player, new MonkeModelS2CPayload(u, true));
+                VmcNet.sendToPlayer(player, new MonkeModelS2CPayload(u, true));
             }
         });
 
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            UUID id = handler.player.getUUID();
+        VmcEvents.onServerDisconnect((player, server) -> {
+            UUID id = player.getUUID();
             realMonkePlayers.remove(id);
             if (monkeModelPlayers.remove(id)) {
-                MonkeModelS2CPayload off = new MonkeModelS2CPayload(id, false);
-                for (ServerPlayer p : PlayerLookup.all(server)) {
-                    ServerPlayNetworking.send(p, off);
-                }
+                VmcNet.sendToAll(server, new MonkeModelS2CPayload(id, false));
             }
         });
+    }
 
-        // Real Monke: track the requester so the hitbox mixin shrinks their box,
-        // then refresh dimensions so it applies immediately.
-        ServerPlayNetworking.registerGlobalReceiver(
-                RealMonkeC2SPayload.ID,
-                (payload, context) -> {
-                    UUID id = context.player().getUUID();
-                    if (payload.enabled()) realMonkePlayers.add(id);
-                    else                   realMonkePlayers.remove(id);
-                    context.player().refreshDimensions();
-                });
+    // Real Monke: track the requester so the hitbox mixin shrinks their box,
+    // then refresh dimensions so it applies immediately.
+    static void onRealMonke(ServerPlayer sender, RealMonkeC2SPayload payload) {
+        UUID id = sender.getUUID();
+        if (payload.enabled()) realMonkePlayers.add(id);
+        else                   realMonkePlayers.remove(id);
+        sender.refreshDimensions();
+    }
 
-        // Monke Model: track + broadcast to everyone so all mod users see it.
-        ServerPlayNetworking.registerGlobalReceiver(
-                MonkeModelC2SPayload.ID,
-                (payload, context) -> {
-                    UUID id = context.player().getUUID();
-                    if (payload.enabled()) monkeModelPlayers.add(id);
-                    else                   monkeModelPlayers.remove(id);
-                    MonkeModelS2CPayload sync = new MonkeModelS2CPayload(id, payload.enabled());
-                    for (ServerPlayer p : PlayerLookup.all(context.player().level().getServer())) {
-                        ServerPlayNetworking.send(p, sync);
-                    }
-                });
+    // Monke Model: track + broadcast to everyone so all mod users see it.
+    static void onMonkeModel(ServerPlayer sender, MonkeModelC2SPayload payload) {
+        UUID id = sender.getUUID();
+        if (payload.enabled()) monkeModelPlayers.add(id);
+        else                   monkeModelPlayers.remove(id);
+        VmcNet.sendToAll(sender.level().getServer(),
+                new MonkeModelS2CPayload(id, payload.enabled()));
     }
 }

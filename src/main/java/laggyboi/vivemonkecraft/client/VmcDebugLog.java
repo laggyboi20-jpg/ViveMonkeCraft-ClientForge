@@ -1,6 +1,6 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.loader.api.FabricLoader;
+import laggyboi.vivemonkecraft.client.platform.VmcPlatform;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +42,7 @@ public final class VmcDebugLog {
         if (!MovementConfig.debugLogging || failed) return;
         try {
             if (writer == null) {
-                Path dir = FabricLoader.getInstance().getGameDir().resolve("logs");
+                Path dir = VmcPlatform.gameDir().resolve("logs");
                 Files.createDirectories(dir);
                 Path file = dir.resolve("vivemonkecraft-debug.log");
                 writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
@@ -65,28 +65,25 @@ public final class VmcDebugLog {
     private static String environmentDump() {
         StringBuilder sb = new StringBuilder();
         try {
-            FabricLoader loader = FabricLoader.getInstance();
             sb.append("---- environment ----\n");
             sb.append("  os      = ").append(System.getProperty("os.name"))
               .append(' ').append(System.getProperty("os.version")).append('\n');
             sb.append("  java    = ").append(System.getProperty("java.version")).append('\n');
-            sb.append("  loader  = ").append(modVersion(loader, "fabricloader")).append('\n');
-            sb.append("  mc      = ").append(modVersion(loader, "minecraft")).append('\n');
-            sb.append("  vmc     = ").append(modVersion(loader, "vivemonkecraft")).append('\n');
+            sb.append("  loader  = ").append(VmcPlatform.loaderName()).append('\n');
+            sb.append("  mc      = ").append(VmcPlatform.modVersion("minecraft")).append('\n');
+            sb.append("  vmc     = ").append(VmcPlatform.modVersion("vivemonkecraft")).append('\n');
 
             sb.append("---- key dependencies ----\n");
             for (String id : new String[]{"vivecraft", "fabric-api", "fabric",
                                           "cloth-config", "cloth-config2", "modmenu"}) {
                 sb.append("  ").append(pad(id)).append(" = ")
-                  .append(loader.isModLoaded(id) ? modVersion(loader, id) : "ABSENT").append('\n');
+                  .append(VmcPlatform.isModLoaded(id) ? VmcPlatform.modVersion(id) : "ABSENT").append('\n');
             }
 
-            sb.append("---- all loaded mods (").append(loader.getAllMods().size()).append(") ----\n");
-            loader.getAllMods().stream()
-                  .map(c -> c.getMetadata())
-                  .sorted(java.util.Comparator.comparing(m -> m.getId()))
-                  .forEach(m -> sb.append("  ").append(m.getId()).append(' ')
-                                  .append(m.getVersion().getFriendlyString()).append('\n'));
+            sb.append("---- all loaded mods (").append(VmcPlatform.modCount()).append(") ----\n");
+            for (String line : VmcPlatform.allMods()) {
+                sb.append("  ").append(line).append('\n');
+            }
 
             sb.append("---- active config ----\n");
             java.util.Map<String, Object> snap = MovementConfig.snapshot();
@@ -98,12 +95,6 @@ public final class VmcDebugLog {
             sb.append("  (environment dump failed: ").append(t).append(")\n");
         }
         return sb.toString();
-    }
-
-    private static String modVersion(FabricLoader loader, String id) {
-        return loader.getModContainer(id)
-                .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                .orElse("absent");
     }
 
     private static String pad(String s) {

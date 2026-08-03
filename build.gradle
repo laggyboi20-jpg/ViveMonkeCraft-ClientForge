@@ -14,12 +14,15 @@ base {
 }
 
 loom {
-    splitEnvironmentSourceSets()
-
+    // NO splitEnvironmentSourceSets(): everything lives in src/main so the file
+    // layout is IDENTICAL to the NeoForge and Forge dev-test branches (which have
+    // no split source sets). That's what lets shared changes merge from this base
+    // branch into the loader branches without path conflicts. The mod is declared
+    // "environment": "client" in fabric.mod.json, so it never loads on a server
+    // anyway — the split source set was only ever enforcing that at compile time.
     mods {
         "vivemonkecraft" {
             sourceSet sourceSets.main
-            sourceSet sourceSets.client
         }
     }
 }

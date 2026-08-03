@@ -494,30 +494,23 @@ public class GorillaLocomotionHandler {
         ensureSwingHistory();
 
         // ---- PHYSICS MODE DISPATCH ----
-        // hybridPhysics → legacy pipeline below, but FLOOR grips use GT anchor drag
-        //                 (best of both; overrides gtPhysics)
-        // gtPhysics     → faithful Gorilla Tag anchor physics (Player.cs port)
-        // else          → the original speed-based model below
+        // gtPhysics → faithful Gorilla Tag anchor physics (Player.cs port). Kept in the
+        //             mod but no longer reachable from the in-game config screen; it
+        //             defaults off and only a hand-edited properties file turns it on.
+        // else      → LEGACY speed-based model below — the supported motor.
         // (The speed-based block keeps its original indentation to keep its diff
         // history readable.)
-        if (MovementConfig.gtPhysics && !MovementConfig.hybridPhysics) {
+        if (MovementConfig.gtPhysics) {
             applyGtPhysics(client, player, touchMain, touchOff,
                            swingMain, swingOff, headPos,
                            topFaceMain, topFaceOff, fallSpeed);
         } else {
 
         // ---- PER-HAND SWING -> VELOCITY ----
-        // In HYBRID mode a FLOOR grip is driven by the GT anchor mechanic (returned as
-        // a velocity here) and a WALL grip by the legacy swing; otherwise it's all
-        // legacy swing. The rest of this block (throw, gravity, friction, wall/floor
-        // stickiness, jumping) is the legacy system either way — which is exactly the
-        // "floor = GT, everything else = legacy" split.
-        Vec3 mainVel = MovementConfig.hybridPhysics
-                ? hybridHand(client, mainHand, touchMain, swingMain, headPos, fallSpeed, topFaceMain)
-                : processHand(client, mainHand, touchMain, swingMain, headPos, fallSpeed, topFaceMain);
-        Vec3 offVel  = MovementConfig.hybridPhysics
-                ? hybridHand(client, offHand,  touchOff,  swingOff,  headPos, fallSpeed, topFaceOff)
-                : processHand(client, offHand,  touchOff,  swingOff,  headPos, fallSpeed, topFaceOff);
+        // Legacy swing → velocity per hand; everything after this (throw, gravity,
+        // friction, wall/floor stickiness, jumping) is the legacy system.
+        Vec3 mainVel = processHand(client, mainHand, touchMain, swingMain, headPos, fallSpeed, topFaceMain);
+        Vec3 offVel  = processHand(client, offHand,  touchOff,  swingOff,  headPos, fallSpeed, topFaceOff);
 
         // SINGLE FLOOR GRIP (see the GT-mode note): keep only one floor hand — the one
         // CLOSEST to the floor (physically lower) — so a stray second floor touch can't
@@ -1554,97 +1547,6 @@ public class GorillaLocomotionHandler {
     }
 
     // -----------------------------------------------------------------------
-    // HYBRID PER-HAND — FLOOR uses the GT anchor mechanic, WALL uses legacy swing
-    // -----------------------------------------------------------------------
-    //
-    // Returns a velocity the legacy pipeline consumes exactly like processHand's, so
-    // all the surrounding legacy behaviour (averaging, smoothing, wall/floor
-    // stickiness, throw, gravity, friction, jumping) is unchanged. The ONLY difference
-    // from legacy is that a FLOOR grip is driven by GT anchor drag (anchor − hand)
-    // instead of swing×pullStrength — which is why the floor never wedges you and
-    // pushing off the ground feels like GT, while everything else stays legacy.
-    //
-    // State note: only ONE processor runs per tick per hand (chosen by hybridPhysics),
-    // so anchor/prevOffset stay consistent. When a wall grip is promoted to a floor
-    // grip mid-hold the anchor is planted at that moment.
-    private Vec3 hybridHand(Minecraft client, HandState state,
-                            Vec3 touchHand, Vec3 swingHand, Vec3 headPos,
-                            double fallSpeed, boolean topFace) {
-
-        boolean touching = isTouchingBlockFallSweep(client, touchHand, fallSpeed);
-        if (!touching) {
-            state.floorGripSuppressed = false;
-            state.release();
-            return Vec3.ZERO;
-        }
-
-        Vec3 offset = swingHand.subtract(headPos);
-
-        if (!state.gripping) {
-            boolean wouldFloor = topFace || touchHand.y < headPos.y - FLOOR_GRIP_DEPTH;
-            if (wouldFloor && state.floorGripSuppressed && bodyOnSolidGround(client)) {
-                state.prevOffset = offset;
-                return Vec3.ZERO;
-            }
-            state.gripping   = true;
-            state.floorGrip  = wouldFloor;
-            state.prevOffset = offset;
-            if (wouldFloor) {                       // plant the GT anchor for the floor
-                state.anchor        = swingHand;
-                state.anchorDisplay = touchHand;
-                state.gripOffset    = offset;
-            }
-            return Vec3.ZERO;
-        }
-
-        // WALL → FLOOR promotion: plant the anchor the moment it becomes a floor grip.
-        if (!state.floorGrip && topFace) {
-            state.floorGrip     = true;
-            state.anchor        = swingHand;
-            state.anchorDisplay = touchHand;
-            state.gripOffset    = offset;
-        }
-
-        if (state.floorGrip) {
-            // ---- FLOOR: GT anchor drag (mirrors gtProcessHand) ----
-            if (state.anchor == null) {             // safety if we ever arrive here unplanted
-                state.anchor     = swingHand;
-                state.gripOffset = offset;
-            }
-            Vec3 handSwing = offset.subtract(state.prevOffset);
-            double push = SettingCaps.gtPushStrength();
-            if (push != 1.0) {
-                state.anchor = state.anchor.subtract(handSwing.scale(push - 1.0));
-            }
-            state.prevOffset = offset;
-
-            Vec3 drag = state.anchor.subtract(swingHand);
-
-            // Same grounded-still wedge fix as GT: a still hand on the ground keeps only
-            // an upward push, never a downward/horizontal hold.
-            if (MovementConfig.groundedGripRelease
-                    && handSwing.length() < MovementConfig.minImpulse
-                    && bodyOnSolidGround(client)) {
-                drag = new Vec3(0.0, Math.max(0.0, drag.y), 0.0);
-            }
-
-            // Unstick when the hand physically strays too far from where it grabbed.
-            if (offset.subtract(state.gripOffset).length() > MovementConfig.gtUnstickDistance) {
-                state.release();
-                return Vec3.ZERO;
-            }
-
-            // Scale to a velocity the way GT does, so it slots into the legacy pipeline.
-            return drag.scale(Math.max(0.05, Math.min(0.95, MovementConfig.gtDragGain)));
-        }
-
-        // ---- WALL: legacy swing (body moves opposite the swing × pullStrength) ----
-        Vec3 swing = offset.subtract(state.prevOffset);
-        state.prevOffset = offset;
-        return swing.scale(-MovementConfig.pullStrength);
-    }
-
-    // -----------------------------------------------------------------------
     // SWING-SPEED AVERAGE  (for the throw)
     // -----------------------------------------------------------------------
 
@@ -1792,7 +1694,7 @@ public class GorillaLocomotionHandler {
                 BlockPos.containing(pp.x, player.getBoundingBox().minY - 0.1, pp.z)) > 0.0;
         VmcDebugLog.log(String.format(
             "%-6s mode=%s aim=%-5s cd=%-2d player=(%.2f,%.2f,%.2f) head=%s hOff=%.2f grip=%s/%s vel=(%.3f,%.3f,%.3f) ground=%b ice=%b noGrav=%b",
-            phase, MovementConfig.hybridPhysics ? "HYB" : MovementConfig.gtPhysics ? "GT" : "LEG",
+            phase, MovementConfig.gtPhysics ? "GT" : "LEG",
             vr.isTeleportAiming(), teleportCooldown,
             pp.x, pp.y, pp.z,
             (hp == null ? "null" : String.format("(%.2f,%.2f,%.2f)", hp.x, hp.y, hp.z)),
@@ -2032,8 +1934,8 @@ public class GorillaLocomotionHandler {
     // HAND SURFACE RESOLVE — keep a FREE hand's model out of solid geometry
     // -----------------------------------------------------------------------
     //
-    // Independent of grab detection and of whichever physics motor runs, so it can
-    // stay identical if a hybrid motor is added later. Two passes over the local
+    // Independent of grab detection and of whichever physics motor runs, so it stays
+    // identical in legacy and GT anchor mode. Two passes over the local
     // blocks, inflated by handRadius so the hand's cube (not just its centre) stops
     // at the face:
     //   1) SWEEP  — trace last->current hand through each block box; if the hand
