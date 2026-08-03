@@ -71,8 +71,14 @@ public final class VmcConfigScreen {
      * the .properties file / keybind / /vmc instead).
      */
     public static boolean clothPresent() {
+        // All three spellings on purpose: Cloth's mod id is "cloth-config" (and
+        // historically "cloth-config2") on Fabric, but "cloth_config" on
+        // Forge/NeoForge, whose mod ids can't contain hyphens. Checking all of them
+        // is what keeps this file byte-identical across the loader branches — so
+        // don't "tidy" it down to the one spelling this branch happens to need.
         return VmcPlatform.isModLoaded("cloth-config")
-            || VmcPlatform.isModLoaded("cloth-config2");
+            || VmcPlatform.isModLoaded("cloth-config2")
+            || VmcPlatform.isModLoaded("cloth_config");
     }
 
     /** Build the config screen. "parent" is the screen to return to on Save/Cancel. */
