@@ -43,7 +43,6 @@ public final class VrViewDrop {
     // State held between push() and pop() so we restore the exact value.
     private static Object vmc$preData   = null;
     private static Vec3   vmc$savedOrig = null;
-    private static int    vmc$depth     = 0;
 
     /**
      * How far the VR view is currently lowered, in blocks. 0 = no drop.
@@ -60,13 +59,17 @@ public final class VrViewDrop {
         return MovementConfig.realMonke ? 0.9 : MovementConfig.cameraHeightOffset;
     }
 
-    /** Lower vrdata_world_pre.origin by the current drop. Always pair with {@link #pop()}. */
+    /**
+     * Lower vrdata_world_pre.origin by the current drop. Always pair with {@link #pop()}.
+     *
+     * Self-healing: if a previous scope never reached its pop() (a tracker threw), the
+     * leftover drop is restored here first. Leaving one applied would shove the player
+     * ~0.9 into the floor for the rest of the session — Vivecraft repositions the body
+     * to this snapshot.
+     */
     public static void push() {
         if (vmc$broken) return;
-        if (vmc$depth++ > 0) return; // an outer scope already dropped it
-
-        vmc$preData   = null;
-        vmc$savedOrig = null;
+        pop(); // restore anything a previous scope leaked
 
         double drop = currentDrop();
         if (drop <= 0.0) return;
@@ -96,10 +99,8 @@ public final class VrViewDrop {
         }
     }
 
-    /** Restore the origin saved by {@link #push()}. Safe to call unpaired. */
+    /** Restore the origin saved by {@link #push()}. Safe to call unpaired or twice. */
     public static void pop() {
-        if (vmc$depth == 0) return;
-        if (--vmc$depth > 0) return; // inner scope; the outer one restores
         if (vmc$preData == null || vmc$savedOrig == null) return;
         try {
             vmc$originField.set(vmc$preData, vmc$savedOrig);
