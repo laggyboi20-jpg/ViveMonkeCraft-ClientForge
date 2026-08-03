@@ -2,6 +2,7 @@ package laggyboi.vivemonkecraft.client.platform;
 
 import laggyboi.vivemonkecraft.client.VivemonkecraftClient;
 import laggyboi.vivemonkecraft.client.VmcCommands;
+import laggyboi.vivemonkecraft.client.VmcClothConfig;
 import laggyboi.vivemonkecraft.client.VmcConfigScreen;
 import net.minecraft.commands.CommandSourceStack;
 import net.neoforged.api.distmarker.Dist;
@@ -41,9 +42,17 @@ public final class VmcBootstrap {
         modEventBus.addListener(this::registerKeyMappings);
 
         // Config screen: NeoForge's equivalent of Mod Menu's config button. Only
-        // offered when Cloth Config is present, exactly as on Fabric — otherwise
-        // clicking it would crash on a missing class.
-        if (VmcConfigScreen.clothPresent()) {
+        // offered when Cloth Config is present, exactly as on Fabric.
+        //
+        // The check MUST go through VmcClothConfig, never VmcConfigScreen. Touching
+        // any static member of VmcConfigScreen makes the JVM verify it, which
+        // resolves the Cloth types in its signatures and throws
+        // NoClassDefFoundError: me/shedaniel/clothconfig2/api/AbstractConfigListEntry
+        // right here in the constructor, killing mod construction on every instance
+        // that doesn't have Cloth installed. (That is exactly what happened the
+        // first time this branch was run.) The lambda below is only ever created
+        // once we already know Cloth is present.
+        if (VmcClothConfig.present()) {
             modContainer.registerExtensionPoint(IConfigScreenFactory.class,
                     (container, parent) -> VmcConfigScreen.create(parent));
         }
