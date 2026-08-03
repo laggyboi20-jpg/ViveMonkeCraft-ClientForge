@@ -91,6 +91,13 @@ processResources {
 jar {
     manifest {
         attributes([
+                // MixinConfigs is how FORGE discovers mixin configs -- it does NOT
+                // read a [[mixins]] table from mods.toml the way NeoForge does
+                // (fmlloader defines Attributes.Name("MixinConfigs")). Without this
+                // line the jar loads but NONE of the 10 mixins apply, so the mod
+                // does nothing: no hitbox shrink, no monke model, no hand clamp.
+                // Comma-separate if more configs are ever added.
+                "MixinConfigs"          : "vivemonkecraft.client.mixins.json",
                 "Specification-Title"   : "vivemonkecraft",
                 "Specification-Vendor"  : "Laggyboi",
                 "Specification-Version" : "1",
