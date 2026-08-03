@@ -1,6 +1,6 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.Reader;
 import java.nio.file.Files;
@@ -341,7 +341,7 @@ public final class MovementConfig {
     // -----------------------------------------------------------------------
 
     private static Path configPath() {
-        return FabricLoader.getInstance().getConfigDir().resolve("vivemonkecraft.properties");
+        return FMLPaths.CONFIGDIR.get().resolve("vivemonkecraft.properties");
     }
 
     // Applies the "Default" preset — the curated good-starting config. Lives HERE

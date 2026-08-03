@@ -1,27 +1,24 @@
 package laggyboi.vivemonkecraft.client;
 
-import com.terraformersmc.modmenu.api.ConfigScreenFactory;
-import com.terraformersmc.modmenu.api.ModMenuApi;
 import java.util.List;
 import java.util.Map;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 // =====================================================================
-// MOD MENU CONFIG SCREEN
+// CONFIG SCREEN  (Cloth Config)
 // =====================================================================
 //
-// This makes a settings screen show up in the "Mods" list (Mod Menu): find
-// ViveMonkeCraft, click the little gear/config button, and you get sliders and
-// toggles for everything — no need to edit the .properties file by hand.
-//
-// It's OPTIONAL: it only does anything if Mod Menu + Cloth Config are installed
-// (they're listed under "suggests" in fabric.mod.json). The .properties file
-// still works exactly the same either way.
+// The NeoForge port of the Fabric ModMenuIntegration screen. The screen itself is
+// pure Cloth Config + vanilla Screen — identical to the Fabric build. Only the
+// entry point differs: Fabric published it through ModMenuApi; here
+// VivemonkecraftClient registers create() as a NeoForge IConfigScreenFactory
+// (the "config" button next to the mod in the Mods list), and ONLY when Cloth is
+// present (VmcClothConfig.present()), so this class — which references Cloth types
+// throughout — is never loaded on a client without Cloth installed.
 //
 // RESET BUTTONS FOLLOW THE ACTIVE PRESET:
 //   Every row's little reset arrow reverts to the value of the CURRENTLY ACTIVE
@@ -31,37 +28,27 @@ import net.minecraft.network.chat.Component;
 //   shown at the top of the Presets page so it's never a mystery.
 // =====================================================================
 
-public class ModMenuIntegration implements ModMenuApi {
+public final class VmcConfigScreen {
+
+    private VmcConfigScreen() {}
 
     // The active preset's value for every field, captured at screen-build time.
     // Each entry's setDefaultValue (= what its reset arrow reverts to) reads from here.
-    private Map<String, Object> presetVals;
+    private static Map<String, Object> presetVals;
 
     // Reset-target getters — pull the active preset's value for a field by name.
-    private double pD(String key) {
+    private static double pD(String key) {
         Object v = presetVals.get(key);
         return v instanceof Number ? ((Number) v).doubleValue() : 0.0;
     }
-    private boolean pB(String key) {
+    private static boolean pB(String key) {
         Object v = presetVals.get(key);
         return v instanceof Boolean && (Boolean) v;
     }
 
-    @Override
-    public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        // The config screen is built with Cloth Config. If it's NOT installed, return
-        // a factory that makes no screen — that way the game never crashes when you
-        // click the config button; you just won't get a screen (use the file / keybind
-        // / /vmc instead). Install Cloth Config to enable this screen.
-        if (!FabricLoader.getInstance().isModLoaded("cloth-config")
-            && !FabricLoader.getInstance().isModLoaded("cloth-config2")) {
-            return parent -> null;
-        }
-        // "parent" is the Mods screen we came from; we return to it on Save/Cancel.
-        return parent -> buildScreen(parent);
-    }
-
-    private Screen buildScreen(Screen parent) {
+    // Entry point — registered as the NeoForge config screen factory. "parent" is
+    // the Mods screen we came from; we return to it on Save/Cancel.
+    public static Screen create(Screen parent) {
         // Sync fields from the file first, so the sliders show the latest values.
         MovementConfig.load();
 
@@ -500,7 +487,7 @@ public class ModMenuIntegration implements ModMenuApi {
     // buttons above can resolve a value for every field). Picking a preset therefore
     // resets settings it doesn't mention back to Default — intended, so "reset to this
     // preset" and the active-preset indicator are always truthful.
-    private void applyPreset(String preset) {
+    private static void applyPreset(String preset) {
         // Full Default baseline first — every preset builds on this.
         MovementConfig.applyDefaultPreset();
 
