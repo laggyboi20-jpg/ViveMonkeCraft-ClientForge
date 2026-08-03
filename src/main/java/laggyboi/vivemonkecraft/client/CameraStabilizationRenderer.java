@@ -8,11 +8,11 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.CoreShaders;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 
@@ -24,11 +24,12 @@ import org.joml.Matrix4fStack;
 // the perceived field-of-view while locomotion is fast. This reduces the
 // peripheral visual-motion signal that contributes to motion sickness.
 //
-// Why WorldRenderEvents.AFTER_TRANSLUCENT:
-//   HudRenderCallback fires during Vivecraft floating GUI panel pass —
-//   its output appears on that panel, not in the VR lens. AFTER_TRANSLUCENT
-//   fires inside the actual scene render, so the vignette ends up in the
-//   headset display.
+// Why RenderLevelStageEvent.AFTER_TRANSLUCENT_BLOCKS:
+//   A HUD render pass fires during Vivecraft's floating GUI panel pass — its
+//   output appears on that panel, not in the VR lens. The AFTER_TRANSLUCENT_BLOCKS
+//   scene-render stage fires inside the actual scene render, so the vignette ends
+//   up in the headset display. (Fabric used WorldRenderEvents.AFTER_TRANSLUCENT,
+//   the same point.)
 //
 // Why clip-space / identity matrices:
 //   The vignette must be head-locked (no world-space parallax). Resetting
@@ -50,10 +51,12 @@ public final class CameraStabilizationRenderer {
     private static float smoothFactor = 0.0f;
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(CameraStabilizationRenderer::onWorldRender);
+        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class,
+                CameraStabilizationRenderer::onWorldRender);
     }
 
-    private static void onWorldRender(WorldRenderContext ctx) {
+    private static void onWorldRender(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         if (!VivemonkecraftClient.isEnabled()) return;
         if (!MovementConfig.cameraStabEnabled) return;
 
