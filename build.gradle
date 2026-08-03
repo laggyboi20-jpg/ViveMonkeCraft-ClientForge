@@ -39,8 +39,8 @@ repositories {
 
 dependencies {
     // Cloth Config, NeoForge flavour. Compile-only + runtime-optional: the mod
-    // checks VmcPlatform.isModLoaded("cloth-config") before ever offering a
-    // screen, so it runs fine without it (see VmcConfigScreen.clothPresent).
+    // checks VmcClothConfig.present() before ever touching a Cloth type, so it
+    // runs fine without Cloth installed and simply offers no config screen.
     //
     // NOTE: Vivecraft is deliberately NOT a dependency here. VivecraftBridge talks
     // to it purely by reflection, which is exactly why this port needed no new VR
