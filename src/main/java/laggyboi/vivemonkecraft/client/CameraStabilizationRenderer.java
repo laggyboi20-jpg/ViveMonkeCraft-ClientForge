@@ -1,9 +1,9 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 // =====================================================================
 // CAMERA STABILIZATION RENDERER  (QuestCraft / Vivecraft)
@@ -12,16 +12,15 @@ import net.minecraft.world.phys.Vec3;
 // Draws a black vignette border inside the VR headset display to narrow the
 // perceived field-of-view while locomotion is fast, reducing motion sickness.
 //
-// ⚠️ 1.21.5 PORT — TEMPORARILY STUBBED ⚠️
+// ⚠️ STILL STUBBED (as on the Fabric 1.21.5–1.21.8 releases) ⚠️
 // Minecraft 1.21.5 removed the immediate-mode render path this used
-// (BufferUploader, CoreShaders, RenderSystem.setShader/enableBlend/
-// disableDepthTest/defaultBlendFunc) in favour of the new RenderPipeline /
-// GpuDevice command system. The head-locked vignette needs reimplementing
-// against that API. The speed/easing logic below is preserved and still
-// computes smoothFactor; only the actual GPU draw (drawVignette) is a no-op,
-// so the rest of the mod builds and runs. Re-enable by implementing
-// drawVignette() with a RenderPipeline. (This is the recurring pain file when
-// porting up MC versions — the rest of the mod is render-API-light.)
+// (BufferUploader, CoreShaders, RenderSystem.setShader/enableBlend/…) in favour
+// of the new RenderPipeline / GpuDevice command system, so the actual GPU draw
+// (drawVignette) is a no-op. The speed/easing logic is preserved and still runs
+// each frame; re-enable by implementing drawVignette() with a RenderPipeline.
+//
+// LOADER NOTE: the per-frame hook is NeoForge's RenderLevelStageEvent
+// (AFTER_TRANSLUCENT_BLOCKS) instead of Fabric's WorldRenderEvents.AFTER_TRANSLUCENT.
 // =====================================================================
 
 public final class CameraStabilizationRenderer {
@@ -37,10 +36,12 @@ public final class CameraStabilizationRenderer {
     private static float smoothFactor = 0.0f;
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(CameraStabilizationRenderer::onWorldRender);
+        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class,
+                CameraStabilizationRenderer::onWorldRender);
     }
 
-    private static void onWorldRender(WorldRenderContext ctx) {
+    private static void onWorldRender(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) return;
         if (!VivemonkecraftClient.isEnabled()) return;
         if (!MovementConfig.cameraStabEnabled) return;
         if (!VivecraftBridge.isVrActive()) return;
@@ -72,10 +73,10 @@ public final class CameraStabilizationRenderer {
         drawVignette(edgeFrac, alpha);
     }
 
-    // TODO(1.21.5): reimplement with the new RenderPipeline / GpuDevice API.
+    // TODO(1.21.5+): reimplement with the new RenderPipeline / GpuDevice API.
     // Was: identity matrices + Tesselator QUADS + BufferUploader.drawWithShader
-    // with CoreShaders.POSITION_COLOR. Currently a no-op so the mod builds on 1.21.5.
+    // with CoreShaders.POSITION_COLOR. Currently a no-op so the mod builds.
     private static void drawVignette(float edgeFrac, int alpha) {
-        // intentionally empty until ported to the 1.21.5 render pipeline
+        // intentionally empty until ported to the new render pipeline
     }
 }
