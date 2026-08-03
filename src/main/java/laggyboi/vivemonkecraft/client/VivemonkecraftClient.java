@@ -1,28 +1,49 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import org.lwjgl.glfw.GLFW;
 
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
+import static net.minecraft.commands.Commands.argument;
+import static net.minecraft.commands.Commands.literal;
 
-// This is the CLIENT entry point — Minecraft calls onInitializeClient() once when
-// the mod loads. We set up: the toggle keybind, a /vmc chat command, and the tick.
-
-public class VivemonkecraftClient implements ClientModInitializer {
+// =====================================================================
+// CLIENT ENTRY POINT  —  NeoForge port of the 1.21.4 Fabric client
+// =====================================================================
+//
+// This is the NEOFORGE flavour of the exact same client the Fabric 1.21.4 release
+// ships: same keybind, same /vmc command, same auto-start / VR watcher tick, same
+// networking. Only the LOADER glue differs — Fabric's ClientModInitializer +
+// ClientPlayNetworking + PayloadTypeRegistry + ClientTickEvents are replaced by
+// NeoForge's @Mod constructor + PayloadRegistrar + game/mod event buses. The mod
+// LOGIC below (fields, onEndTick, applyEnabled, the command tree, presets) is the
+// Fabric behaviour verbatim.
+//
+// dist = Dist.CLIENT: client-only mod (Fabric said "environment": "client"). It
+// must still be able to CONNECT to servers that don't have it — every payload is
+// registered optional() below so the handshake never rejects a vanilla server.
+// =====================================================================
+@Mod(value = "vivemonkecraft", dist = Dist.CLIENT)
+public class VivemonkecraftClient {
 
     // Is gorilla locomotion currently on? Static so the mixins can read it.
     // Starts OFF — auto-enabled once when the player joins a world (see onEndTick).
@@ -85,16 +106,17 @@ public class VivemonkecraftClient implements ClientModInitializer {
     // To toggle via Vivecraft radial menu: go to VR Settings -> Radial Menu and assign
     // the "ViveMonkeCraft: Toggle" keybind to a radial slot.
     // To toggle via keyboard: rebind in Options -> Controls -> Miscellaneous.
-    private final KeyMapping toggleKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+    // Created eagerly so the tick code can reference it; REGISTERED in
+    // RegisterKeyMappingsEvent (NeoForge's equivalent of Fabric's KeyBindingHelper).
+    private final KeyMapping toggleKey = new KeyMapping(
             "key.vivemonkecraft.toggle",
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_UNKNOWN,
-            // 1.21.9 replaced the String category constants (CATEGORY_MISC) with
-            // KeyMapping.Category record objects.
             KeyMapping.Category.MISC
-    ));
+    );
 
-    public void onInitializeClient() {
+    // NeoForge instantiates this once and injects the mod's event buses.
+    public VivemonkecraftClient(IEventBus modEventBus, ModContainer modContainer) {
 
         handler = new GorillaLocomotionHandler();
 
@@ -107,199 +129,222 @@ public class VivemonkecraftClient implements ClientModInitializer {
         // Load the editable config at startup (creates it the first time).
         MovementConfig.load();
 
-        // Register the S2C payload type so Fabric can decode incoming server packets.
-        // This must happen during init (before any world joins).
-        PayloadTypeRegistry.clientboundPlay().register(
-                ServerConfigPayload.ID,
-                ServerConfigPayload.STREAM_CODEC
-        );
+        // Mod-bus events: payload + keybind registration must happen on the mod bus.
+        modEventBus.addListener(this::registerPayloads);
+        modEventBus.addListener(this::registerKeyMappings);
 
-        // Real Monke: C2S request asking monke-server to shrink our hitbox height.
-        PayloadTypeRegistry.serverboundPlay().register(
-                RealMonkeC2SPayload.ID,
-                RealMonkeC2SPayload.STREAM_CODEC
-        );
+        // Config screen: NeoForge's equivalent of Mod Menu's config button. Only
+        // offered when Cloth Config is present, exactly as on Fabric. The check MUST
+        // go through VmcClothConfig — never touch VmcConfigScreen statically here, or
+        // the JVM resolves the Cloth types in its signatures and throws
+        // NoClassDefFoundError on every client without Cloth installed.
+        if (VmcClothConfig.present()) {
+            modContainer.registerExtensionPoint(IConfigScreenFactory.class,
+                    (container, parent) -> VmcConfigScreen.create(parent));
+        }
 
-        // Wall slide: C2S keepalive telling monke-server we're gripping, so it zeroes
-        // our (server-authoritative) fall distance — the dedicated-server half of the
-        // no-fall-damage slide. Singleplayer/LAN host handles this in the handler by
-        // resetting the integrated server player directly, so the packet is dedicated-only.
-        PayloadTypeRegistry.serverboundPlay().register(
-                WallSlideC2SPayload.ID,
-                WallSlideC2SPayload.STREAM_CODEC
-        );
-
-        // Magma touch: C2S signal telling monke-server to apply hot-floor damage while
-        // a hand grips a magma block (server-authoritative, so dedicated-only — singleplayer
-        // hurts the integrated server player directly in the handler).
-        PayloadTypeRegistry.serverboundPlay().register(
-                MagmaTouchC2SPayload.ID,
-                MagmaTouchC2SPayload.STREAM_CODEC
-        );
-
-        // Monke model sync: we announce our legless look (C2S) and receive
-        // everyone else's (S2C broadcast from monke-server).
-        PayloadTypeRegistry.serverboundPlay().register(
-                MonkeModelC2SPayload.ID,
-                MonkeModelC2SPayload.STREAM_CODEC
-        );
-        PayloadTypeRegistry.clientboundPlay().register(
-                MonkeModelS2CPayload.ID,
-                MonkeModelS2CPayload.STREAM_CODEC
-        );
-        ClientPlayNetworking.registerGlobalReceiver(
-                MonkeModelS2CPayload.ID,
-                (payload, context) -> MonkeModelClientSet.set(payload.player(), payload.enabled())
-        );
+        // Game-bus events: tick, join, disconnect, and the /vmc client command.
+        NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
+                e -> onEndTick(Minecraft.getInstance()));
+        NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingIn.class,
+                e -> onClientJoin());
+        NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingOut.class,
+                e -> onClientDisconnect());
+        NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class,
+                this::registerCommands);
 
         // Embedded server logic: when THIS client hosts (singleplayer / Open-to-LAN /
-        // Essential), its integrated server plays the role of monke-server — so two
-        // players who both have this mod can play together over LAN with NO separate
-        // server jar. Harmless on a pure client (these server events never fire when
-        // connected to a remote server). Payload types were registered above.
+        // Essential), its integrated server plays the role of monke-server. Registers
+        // its own server-side game-bus listeners; the payload TYPES + server handlers
+        // are wired in registerPayloads() below. Harmless on a pure client.
         EmbeddedServerLogic.register();
+    }
 
-        // When the server companion mod (monke-server) sends its config, store the
-        // limits. Receiving this packet IS the multiplayer authorization: without it
-        // the mod refuses to enable on a dedicated server (see serverAuthorized).
-        ClientPlayNetworking.registerGlobalReceiver(
-                ServerConfigPayload.ID,
-                (payload, context) -> {
-                    ServerLimits.apply(payload);
-                    VmcDebugLog.event("NET", "← ServerConfig modEnabled=" + payload.modEnabled()
-                            + " (server companion present → authorized)");
+    // -----------------------------------------------------------------------
+    // Mod-bus registration
+    // -----------------------------------------------------------------------
 
-                    context.client().execute(() -> {
-                        if (!payload.modEnabled()) {
-                            // Server banned the mod — force-disable immediately, even
-                            // if auto-start already fired before the packet arrived.
-                            if (enabled) {
-                                enabled = false;
-                                handler.onDisable(context.client());
-                            }
-                            if (context.client().player != null) {
-                                context.client().gui.setOverlayMessage(
-                                    Component.literal("§e[ViveMonkeCraft] §cDisabled by server"),
-                                    false
-                                );
-                            }
-                        } else if (autoStarted && !enabled) {
-                            // Authorization arrived AFTER the auto-start window closed
-                            // (slow connection) — turn the mod on now.
-                            applyEnabled(true);
-                        }
-                    });
-                }
-        );
+    // All payloads are registered here (both directions, type + handler in one call).
+    // .optional() is what lets the client still connect to servers that have NONE of
+    // these channels — "no ServerConfigPayload arrived" is exactly how the mod detects
+    // an un-opted-in server and stays disabled. Version "1" is the wire-format version.
+    private void registerPayloads(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar r = event.registrar("1").optional();
 
-        // Reset state when the player joins a world so the tick handler will
-        // fire applyEnabled(true) once the player entity is ready (after the
-        // PACKET_WAIT_TICKS grace window).
-        ClientPlayConnectionEvents.JOIN.register((networkHandler, sender, client) -> {
-            autoStarted       = false;
-            ticksSinceJoin    = 0;
-            warnedNoServerMod = false;
-            lastRealMonke     = false;   // re-apply the shrink after the join settles
-            lastMonkeModel    = false;   // re-announce the legless look too
-        });
+        // S2C — the server companion (or our integrated server) sends these.
+        r.playToClient(ServerConfigPayload.ID, ServerConfigPayload.STREAM_CODEC,
+                (payload, ctx) -> ctx.enqueueWork(() -> onServerConfig(payload)));
+        r.playToClient(MonkeModelS2CPayload.ID, MonkeModelS2CPayload.STREAM_CODEC,
+                (payload, ctx) -> ctx.enqueueWork(() ->
+                        MonkeModelClientSet.set(payload.player(), payload.enabled())));
 
-        // On disconnect: turn off gorilla locomotion, clear server limits, and reset
-        // counters so the next world join auto-starts again after the grace window.
-        ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> {
-            autoStarted       = false;
-            ticksSinceJoin    = 0;
-            warnedNoServerMod = false;
-            lastRealMonke     = false;
-            lastMonkeModel    = false;
-            wasInGui          = false;
-            lastDimension     = null;
-            wallSlideSent     = false;   // next world starts with no pending grip state
-            vrWasActive       = false;   // re-evaluate VR presence fresh next world
-            MonkeModelClientSet.clear(); // stale legless flags don't carry over
-            ServerLimits.reset();   // clear caps + authorization for the next world
+        // C2S answered by the integrated server (EmbeddedServerLogic) when hosting.
+        r.playToServer(RealMonkeC2SPayload.ID, RealMonkeC2SPayload.STREAM_CODEC,
+                (payload, ctx) -> ctx.enqueueWork(() ->
+                        EmbeddedServerLogic.onRealMonke(ctx.player(), payload)));
+        r.playToServer(MonkeModelC2SPayload.ID, MonkeModelC2SPayload.STREAM_CODEC,
+                (payload, ctx) -> ctx.enqueueWork(() ->
+                        EmbeddedServerLogic.onMonkeModel(ctx.player(), payload)));
+
+        // C2S answered ONLY by the separate dedicated-server companion. The TYPE must
+        // still be registered so the client can send it (and canSend() sees a channel);
+        // the integrated server needs no handler — singleplayer/LAN does this locally.
+        r.playToServer(WallSlideC2SPayload.ID, WallSlideC2SPayload.STREAM_CODEC,
+                (payload, ctx) -> { });
+        r.playToServer(MagmaTouchC2SPayload.ID, MagmaTouchC2SPayload.STREAM_CODEC,
+                (payload, ctx) -> { });
+    }
+
+    private void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(toggleKey);
+    }
+
+    // Client handler for the server companion's config packet. Receiving this packet
+    // IS the multiplayer authorization: without it the mod refuses to enable on a
+    // dedicated server (see serverAuthorized). Runs on the main thread (enqueueWork).
+    private void onServerConfig(ServerConfigPayload payload) {
+        ServerLimits.apply(payload);
+        VmcDebugLog.event("NET", "← ServerConfig modEnabled=" + payload.modEnabled()
+                + " (server companion present → authorized)");
+
+        Minecraft client = Minecraft.getInstance();
+        if (!payload.modEnabled()) {
+            // Server banned the mod — force-disable immediately, even if auto-start
+            // already fired before the packet arrived.
             if (enabled) {
                 enabled = false;
                 handler.onDisable(client);
             }
-        });
+            if (client.player != null) {
+                client.gui.setOverlayMessage(
+                        Component.literal("§e[ViveMonkeCraft] §cDisabled by server"),
+                        false);
+            }
+        } else if (autoStarted && !enabled) {
+            // Authorization arrived AFTER the auto-start window closed (slow
+            // connection) — turn the mod on now.
+            applyEnabled(true);
+        }
+    }
 
-        // Run our logic at the end of every client tick.
-        ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
+    // -----------------------------------------------------------------------
+    // Connection lifecycle (game bus)
+    // -----------------------------------------------------------------------
 
-        // Register the /vmc chat command (open chat with T, type /vmc).
-        //   /vmc               -> toggle on/off
-        //   /vmc on|off        -> set explicitly
-        //   /vmc reload        -> re-read the config file
-        //   /vmc gravity <0-1> -> set the gravity multiplier (operator only)
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> {
-            dispatcher.register(literal("vmc")
-                .executes(ctx -> { toggle(); return 1; })
-                .then(literal("on").executes(ctx -> { applyEnabled(true); return 1; }))
-                .then(literal("off").executes(ctx -> { applyEnabled(false); return 1; }))
-                .then(literal("reload").executes(ctx -> { reloadConfig(); return 1; }))
-                .then(literal("set")
-                    .then(argument("setting", StringArgumentType.word())
-                        .suggests((ctx, builder) -> {
-                            String typed = builder.getRemainingLowerCase();
-                            for (String n : MovementConfig.settingNames()) {
-                                if (n.toLowerCase().startsWith(typed)) builder.suggest(n);
-                            }
-                            return builder.buildFuture();
-                        })
-                        .then(argument("value", StringArgumentType.word())
-                            .executes(ctx -> {
-                                Minecraft mc = Minecraft.getInstance();
-                                String name  = StringArgumentType.getString(ctx, "setting");
-                                String value = StringArgumentType.getString(ctx, "value");
-                                String result = MovementConfig.setByName(name, value);
-                                if (mc.player != null) {
-                                    mc.gui.setOverlayMessage(Component.literal(
-                                        result != null
-                                            ? "§e[ViveMonkeCraft] §f" + result
-                                            : "§c[ViveMonkeCraft] §fUnknown setting or bad value: "
-                                                + name + " " + value),
-                                        false);
-                                }
-                                return result != null ? 1 : 0;
-                            })
-                        )
-                    )
-                )
-                .then(literal("gravity")
-                    .then(argument("level", DoubleArgumentType.doubleArg(0.0, 1.0))
+    // Reset state when the player joins a world so the tick handler will fire
+    // applyEnabled(true) once the player entity is ready (after PACKET_WAIT_TICKS).
+    private void onClientJoin() {
+        autoStarted       = false;
+        ticksSinceJoin    = 0;
+        warnedNoServerMod = false;
+        lastRealMonke     = false;   // re-apply the shrink after the join settles
+        lastMonkeModel    = false;   // re-announce the legless look too
+    }
+
+    // On disconnect: turn off gorilla locomotion, clear server limits, and reset
+    // counters so the next world join auto-starts again after the grace window.
+    private void onClientDisconnect() {
+        Minecraft client = Minecraft.getInstance();
+        autoStarted       = false;
+        ticksSinceJoin    = 0;
+        warnedNoServerMod = false;
+        lastRealMonke     = false;
+        lastMonkeModel    = false;
+        wasInGui          = false;
+        lastDimension     = null;
+        wallSlideSent     = false;   // next world starts with no pending grip state
+        vrWasActive       = false;   // re-evaluate VR presence fresh next world
+        MonkeModelClientSet.clear(); // stale legless flags don't carry over
+        ServerLimits.reset();        // clear caps + authorization for the next world
+        if (enabled) {
+            enabled = false;
+            handler.onDisable(client);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // /vmc client command
+    // -----------------------------------------------------------------------
+    //   /vmc               -> toggle on/off
+    //   /vmc on|off        -> set explicitly
+    //   /vmc reload        -> re-read the config file
+    //   /vmc set <k> <v>   -> set a config field by name
+    //   /vmc gravity <0-1> -> set the gravity multiplier (operator only)
+    private void registerCommands(RegisterClientCommandsEvent event) {
+        event.getDispatcher().register(literal("vmc")
+            .executes(ctx -> { toggle(); return 1; })
+            .then(literal("on").executes(ctx -> { applyEnabled(true); return 1; }))
+            .then(literal("off").executes(ctx -> { applyEnabled(false); return 1; }))
+            .then(literal("reload").executes(ctx -> { reloadConfig(); return 1; }))
+            .then(literal("set")
+                .then(argument("setting", StringArgumentType.word())
+                    .suggests((ctx, builder) -> {
+                        String typed = builder.getRemainingLowerCase();
+                        for (String n : MovementConfig.settingNames()) {
+                            if (n.toLowerCase().startsWith(typed)) builder.suggest(n);
+                        }
+                        return builder.buildFuture();
+                    })
+                    .then(argument("value", StringArgumentType.word())
                         .executes(ctx -> {
                             Minecraft mc = Minecraft.getInstance();
-                            // Op-lock: requires permission level 2 (operator).
-                            // In singleplayer the host is always level 4, so this always works.
-                            // On a server it reflects what the server reported to the client.
-                            if (mc.player == null || !mc.player.permissions().hasPermission(
-                                    net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)) {
-                                if (mc.player != null) {
-                                    mc.gui.setOverlayMessage(
-                                        Component.literal("§c[ViveMonkeCraft] §fNeed operator access to change gravity"),
-                                        false
-                                    );
-                                }
-                                return 0;
+                            String name  = StringArgumentType.getString(ctx, "setting");
+                            String value = StringArgumentType.getString(ctx, "value");
+                            String result = MovementConfig.setByName(name, value);
+                            if (mc.player != null) {
+                                mc.gui.setOverlayMessage(Component.literal(
+                                    result != null
+                                        ? "§e[ViveMonkeCraft] §f" + result
+                                        : "§c[ViveMonkeCraft] §fUnknown setting or bad value: "
+                                            + name + " " + value),
+                                    false);
                             }
-                            double level = DoubleArgumentType.getDouble(ctx, "level");
-                            MovementConfig.gravityMultiplier = level;
-                            MovementConfig.save();
-                            mc.gui.setOverlayMessage(
-                                Component.literal("§e[ViveMonkeCraft] §fGravity: §b" + level
-                                    + (level == 0.0 ? " §7(zero-G)" : level == 1.0 ? " §7(normal)" : "")),
-                                false
-                            );
-                            return 1;
+                            return result != null ? 1 : 0;
                         })
                     )
                 )
-            );
-        });
+            )
+            .then(literal("gravity")
+                .then(argument("level", DoubleArgumentType.doubleArg(0.0, 1.0))
+                    .executes(ctx -> {
+                        Minecraft mc = Minecraft.getInstance();
+                        // Op-lock: requires permission level 2 (operator).
+                        // In singleplayer the host is always level 4, so this always works.
+                        // On a server it reflects what the server reported to the client.
+                        if (mc.player == null || !mc.player.permissions().hasPermission(
+                                    net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)) {
+                            if (mc.player != null) {
+                                mc.gui.setOverlayMessage(
+                                    Component.literal("§c[ViveMonkeCraft] §fNeed operator access to change gravity"),
+                                    false
+                                );
+                            }
+                            return 0;
+                        }
+                        double level = DoubleArgumentType.getDouble(ctx, "level");
+                        MovementConfig.gravityMultiplier = level;
+                        MovementConfig.save();
+                        mc.gui.setOverlayMessage(
+                            Component.literal("§e[ViveMonkeCraft] §fGravity: §b" + level
+                                + (level == 0.0 ? " §7(zero-G)" : level == 1.0 ? " §7(normal)" : "")),
+                            false
+                        );
+                        return 1;
+                    })
+                )
+            )
+        );
     }
 
     public static boolean isEnabled() {
         return enabled;
+    }
+
+    // Client -> server helpers (NeoForge). canSend mirrors Fabric's
+    // ClientPlayNetworking.canSend: false when the other end has no receiver.
+    private static boolean canSend(CustomPacketPayload.Type<?> id) {
+        var connection = Minecraft.getInstance().getConnection();
+        return connection != null && connection.hasChannel(id);
     }
 
     // -----------------------------------------------------------------------
@@ -322,9 +367,6 @@ public class VivemonkecraftClient implements ClientModInitializer {
                 // headset). Here we only warn once if the server hasn't opted in.
                 if (!serverAuthorized(client) && !warnedNoServerMod) {
                     warnedNoServerMod = true;
-                    // 26.1 removed Player.displayClientMessage(Component, boolean);
-                    // sendSystemMessage(Component) is the chat-message equivalent (the old
-                    // boolean=false meant "chat, not action bar").
                     client.player.sendSystemMessage(Component.literal(
                         "§e[ViveMonkeCraft] §cThis server doesn't run the monke-server "
                         + "companion mod, so gorilla locomotion is disabled here. "
@@ -395,8 +437,8 @@ public class VivemonkecraftClient implements ClientModInitializer {
         if (model != lastMonkeModel && client.player != null) {
             lastMonkeModel = model;
             MonkeModelClientSet.set(client.player.getUUID(), model);
-            if (ClientPlayNetworking.canSend(MonkeModelC2SPayload.ID)) {
-                ClientPlayNetworking.send(new MonkeModelC2SPayload(model));
+            if (canSend(MonkeModelC2SPayload.ID)) {
+                ClientPacketDistributor.sendToServer(new MonkeModelC2SPayload(model));
             }
         }
 
@@ -430,8 +472,8 @@ public class VivemonkecraftClient implements ClientModInitializer {
         // hand grips a magma block. (Singleplayer/LAN hurts the integrated player in the
         // handler.) Sent each touching tick; hurt invulnerability frames throttle it.
         if (magmaNow && !client.hasSingleplayerServer()
-                && ClientPlayNetworking.canSend(MagmaTouchC2SPayload.ID)) {
-            ClientPlayNetworking.send(MagmaTouchC2SPayload.INSTANCE);
+                && canSend(MagmaTouchC2SPayload.ID)) {
+            ClientPacketDistributor.sendToServer(MagmaTouchC2SPayload.INSTANCE);
         }
     }
 
@@ -440,14 +482,14 @@ public class VivemonkecraftClient implements ClientModInitializer {
     // no receiver exists on the other end (server without the companion mod).
     private void syncWallSlide(Minecraft client, boolean gripping) {
         if (client.hasSingleplayerServer()) return;
-        if (!ClientPlayNetworking.canSend(WallSlideC2SPayload.ID)) return;
+        if (!canSend(WallSlideC2SPayload.ID)) return;
         if (gripping) {
             if (!wallSlideSent) VmcDebugLog.event("NET", "→ WallSlide(true) [no-fall-damage]");
-            ClientPlayNetworking.send(new WallSlideC2SPayload(true));
+            ClientPacketDistributor.sendToServer(new WallSlideC2SPayload(true));
             wallSlideSent = true;
         } else if (wallSlideSent) {
             VmcDebugLog.event("NET", "→ WallSlide(false)");
-            ClientPlayNetworking.send(new WallSlideC2SPayload(false));
+            ClientPacketDistributor.sendToServer(new WallSlideC2SPayload(false));
             wallSlideSent = false;
         }
     }
@@ -471,8 +513,8 @@ public class VivemonkecraftClient implements ClientModInitializer {
                 if (sp != null) sp.refreshDimensions();   // PlayerHitboxMixin caps the height
             });
         } else if (ServerLimits.packetReceived
-                && ClientPlayNetworking.canSend(RealMonkeC2SPayload.ID)) {
-            ClientPlayNetworking.send(new RealMonkeC2SPayload(on));
+                && canSend(RealMonkeC2SPayload.ID)) {
+            ClientPacketDistributor.sendToServer(new RealMonkeC2SPayload(on));
         }
     }
 
