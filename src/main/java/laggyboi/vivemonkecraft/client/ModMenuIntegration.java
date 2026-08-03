@@ -23,7 +23,11 @@ public class ModMenuIntegration implements ModMenuApi {
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
         // No Cloth Config -> offer no screen rather than crashing on click.
-        if (!VmcConfigScreen.clothPresent()) {
+        // The check MUST go through VmcClothConfig, never VmcConfigScreen: touching
+        // VmcConfigScreen at all loads Cloth types and throws NoClassDefFoundError
+        // when Cloth isn't installed. The method-ref below is only created once
+        // we know Cloth is present.
+        if (!VmcClothConfig.present()) {
             return parent -> null;
         }
         return VmcConfigScreen::create;
