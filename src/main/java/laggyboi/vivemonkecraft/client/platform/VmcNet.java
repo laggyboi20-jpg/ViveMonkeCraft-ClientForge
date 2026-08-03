@@ -1,19 +1,19 @@
 package laggyboi.vivemonkecraft.client.platform;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 // =====================================================================
-// NETWORKING                                               [FABRIC BODY]
+// NETWORKING                                             [NEOFORGE BODY]
 // =====================================================================
 //
 // The PAYLOAD CLASSES themselves are pure vanilla (CustomPacketPayload +
@@ -26,13 +26,20 @@ import java.util.function.Consumer;
 //   * All payloads are OPTIONAL. The client MUST be able to connect to a server
 //     that has none of these channels: "no ServerConfigPayload arrived" is
 //     exactly how the mod detects an un-opted-in server and stays disabled.
-//     On NeoForge/Forge this means PayloadRegistrar#optional() — without it the
-//     loader treats channels as required and the handshake rejects the
-//     connection, silently destroying the server opt-in policy.
-//   * Handlers run on the MAIN thread (client thread / server thread), so
-//     handler bodies may touch game state directly.
+//     >>> On NeoForge this is what registrar.optional() below buys us. WITHOUT
+//     >>> IT NeoForge treats every channel as required and the handshake
+//     >>> REJECTS the connection to any server lacking the companion mod —
+//     >>> which would silently destroy the whole server opt-in policy and make
+//     >>> the mod unusable on vanilla servers. Do not remove it.
+//   * Handlers run on the MAIN thread. NeoForge's default HandlerThread is MAIN,
+//     and we additionally enqueueWork() so handler bodies may touch game state.
 //   * canSendToServer() must return false — not throw — when no receiver exists
 //     on the other end.
+//
+// ORDERING NOTE: NeoForge only accepts payload registration during
+// RegisterPayloadHandlersEvent, but the shared VivemonkecraftClient.init() calls
+// register() earlier (from the mod constructor). So register() BUFFERS the block
+// and VmcBootstrap replays it via flush() when the event fires.
 // ---------------------------------------------------------------------
 // =====================================================================
 public final class VmcNet {
@@ -68,22 +75,30 @@ public final class VmcNet {
                 StreamCodec<? super FriendlyByteBuf, T> codec);
     }
 
-    /** Called once from the bootstrap with every payload the mod uses. */
+    // Buffered until RegisterPayloadHandlersEvent — see the ordering note above.
+    private static Consumer<Registrar> pending;
+
+    /** Called once from the shared client init with every payload the mod uses. */
     public static void register(Consumer<Registrar> block) {
-        block.accept(new FabricRegistrar());
+        pending = block;
     }
 
-    private static final class FabricRegistrar implements Registrar {
+    /** Called by VmcBootstrap from RegisterPayloadHandlersEvent. */
+    public static void flush(PayloadRegistrar registrar) {
+        if (pending == null) return;
+        pending.accept(new NeoRegistrar(registrar.optional()));
+        pending = null;
+    }
+
+    private record NeoRegistrar(PayloadRegistrar registrar) implements Registrar {
 
         @Override
         public <T extends CustomPacketPayload> void clientbound(
                 CustomPacketPayload.Type<T> id,
                 StreamCodec<? super FriendlyByteBuf, T> codec,
                 Consumer<T> handler) {
-            PayloadTypeRegistry.clientboundPlay().register(id, codec);
-            // Fabric runs play-phase receivers on the client thread already.
-            ClientPlayNetworking.registerGlobalReceiver(id,
-                    (payload, context) -> handler.accept(payload));
+            registrar.playToClient(id, cast(codec),
+                    (payload, context) -> context.enqueueWork(() -> handler.accept(payload)));
         }
 
         @Override
@@ -91,16 +106,32 @@ public final class VmcNet {
                 CustomPacketPayload.Type<T> id,
                 StreamCodec<? super FriendlyByteBuf, T> codec,
                 BiConsumer<ServerPlayer, T> handler) {
-            PayloadTypeRegistry.serverboundPlay().register(id, codec);
-            ServerPlayNetworking.registerGlobalReceiver(id,
-                    (payload, context) -> handler.accept(context.player(), payload));
+            registrar.playToServer(id, cast(codec), (payload, context) ->
+                    context.enqueueWork(() -> {
+                        if (context.player() instanceof ServerPlayer sp) {
+                            handler.accept(sp, payload);
+                        }
+                    }));
         }
 
         @Override
         public <T extends CustomPacketPayload> void serverboundNoHandler(
                 CustomPacketPayload.Type<T> id,
                 StreamCodec<? super FriendlyByteBuf, T> codec) {
-            PayloadTypeRegistry.serverboundPlay().register(id, codec);
+            // NeoForge has no "type only" registration — register a no-op handler.
+            // These payloads are answered only by the separate server companion mod,
+            // so nothing on this side should ever receive them anyway.
+            registrar.playToServer(id, cast(codec), (payload, context) -> { });
+        }
+
+        // The shared API takes StreamCodec<? super FriendlyByteBuf, T> (what the
+        // payload classes declare); NeoForge wants StreamCodec<? super RegistryFriendlyByteBuf, T>.
+        // FriendlyByteBuf is a supertype of RegistryFriendlyByteBuf, so any codec
+        // accepting the former also accepts the latter — the cast is sound.
+        @SuppressWarnings("unchecked")
+        private static <T> StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, T> cast(
+                StreamCodec<? super FriendlyByteBuf, T> codec) {
+            return (StreamCodec<? super net.minecraft.network.RegistryFriendlyByteBuf, T>) codec;
         }
     }
 
@@ -110,24 +141,25 @@ public final class VmcNet {
 
     /** Client -> server. Caller should gate on {@link #canSendToServer}. */
     public static void sendToServer(CustomPacketPayload payload) {
-        ClientPlayNetworking.send(payload);
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(payload);
     }
 
     /** False when the other end has no receiver (e.g. a server without the companion). */
     public static boolean canSendToServer(CustomPacketPayload.Type<?> id) {
-        return ClientPlayNetworking.canSend(id);
+        var connection = Minecraft.getInstance().getConnection();
+        return connection != null && connection.hasChannel(id);
     }
 
     /** Server -> one client. */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        ServerPlayNetworking.send(player, payload);
+        PacketDistributor.sendToPlayer(player, payload);
     }
 
     /** Server -> every connected client. */
     public static void sendToAll(MinecraftServer server, CustomPacketPayload payload) {
         if (server == null) return;
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            ServerPlayNetworking.send(p, payload);
+            PacketDistributor.sendToPlayer(p, payload);
         }
     }
 }

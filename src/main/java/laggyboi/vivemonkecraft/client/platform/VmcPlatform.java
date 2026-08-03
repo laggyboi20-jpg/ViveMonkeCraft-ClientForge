@@ -1,13 +1,14 @@
 package laggyboi.vivemonkecraft.client.platform;
 
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.loading.FMLPaths;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
 
 // =====================================================================
-// PLATFORM — loader paths + mod queries                    [FABRIC BODY]
+// PLATFORM — loader paths + mod queries                  [NEOFORGE BODY]
 // =====================================================================
 //
 // One of the four small classes that isolate everything loader-specific.
@@ -15,9 +16,9 @@ import java.util.stream.Collectors;
 // branches — only the bodies differ. Every other file in the mod calls this and
 // therefore compiles unchanged on all three loaders.
 //
-// When you add a feature on the base (Fabric) branch and merge it into the
-// loader branches, the only files that can conflict are these four plus the
-// bootstrap and the config-screen entry. Keep the signatures below stable.
+// When a feature is added on the base (Fabric) branch and merged into this one,
+// the only files that can conflict are these four plus the bootstrap and the
+// config-screen entry. Keep the signatures below stable.
 // =====================================================================
 public final class VmcPlatform {
 
@@ -25,42 +26,50 @@ public final class VmcPlatform {
 
     /** Where vivemonkecraft.properties lives. */
     public static Path configDir() {
-        return FabricLoader.getInstance().getConfigDir();
+        return FMLPaths.CONFIGDIR.get();
     }
 
     /** Game root — the debug log is written to <gameDir>/logs. */
     public static Path gameDir() {
-        return FabricLoader.getInstance().getGameDir();
+        return FMLPaths.GAMEDIR.get();
     }
 
-    /** True if a mod with this id is present (used for Cloth Config / Vivecraft checks). */
+    /**
+     * True if a mod with this id is present.
+     *
+     * NOTE the id spelling difference between loaders: Cloth Config is
+     * "cloth-config" on Fabric but "cloth_config" on NeoForge (NeoForge mod ids
+     * can't contain hyphens). Callers pass BOTH spellings, so this needs no
+     * translation — but don't "tidy" the caller into checking only one.
+     */
     public static boolean isModLoaded(String id) {
-        return FabricLoader.getInstance().isModLoaded(id);
+        return ModList.get() != null && ModList.get().isLoaded(id);
     }
 
     /** Friendly version string for a mod id, or "absent" when it isn't installed. */
     public static String modVersion(String id) {
-        return FabricLoader.getInstance().getModContainer(id)
-                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+        if (ModList.get() == null) return "absent";
+        return ModList.get().getModContainerById(id)
+                .map(c -> c.getModInfo().getVersion().toString())
                 .orElse("absent");
     }
 
     /** The loader's own id/version, for the debug env dump header. */
     public static String loaderName() {
-        return "fabric " + modVersion("fabricloader");
+        return "neoforge " + modVersion("neoforge");
     }
 
     /** Total loaded mod count — debug env dump. */
     public static int modCount() {
-        return FabricLoader.getInstance().getAllMods().size();
+        return ModList.get() == null ? 0 : ModList.get().getMods().size();
     }
 
     /** "<id> <version>" for every loaded mod, sorted by id — debug env dump. */
     public static List<String> allMods() {
-        return FabricLoader.getInstance().getAllMods().stream()
-                .map(c -> c.getMetadata())
-                .sorted(java.util.Comparator.comparing(m -> m.getId()))
-                .map(m -> m.getId() + " " + m.getVersion().getFriendlyString())
+        if (ModList.get() == null) return List.of();
+        return ModList.get().getMods().stream()
+                .sorted(java.util.Comparator.comparing(m -> m.getModId()))
+                .map(m -> m.getModId() + " " + m.getVersion().toString())
                 .collect(Collectors.toList());
     }
 }

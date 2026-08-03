@@ -1,21 +1,29 @@
 package laggyboi.vivemonkecraft.client.platform;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.minecraft.client.KeyMapping;
 import org.lwjgl.glfw.GLFW;
 
 // =====================================================================
-// KEYBINDS                                                 [FABRIC BODY]
+// KEYBINDS                                               [NEOFORGE BODY]
 // =====================================================================
 //
 // The KeyMapping itself is constructed identically on every loader (it's vanilla);
 // only how it gets REGISTERED differs, which is what init() hides.
 //
+// On NeoForge registration may only happen inside RegisterKeyMappingsEvent on the
+// MOD event bus, so the actual registration lives in VmcBootstrap and init() is a
+// no-op here. TOGGLE is still created eagerly so the shared client code can hold a
+// reference to it before that event fires.
+//
 // UNBOUND by default (no key out of the box). To toggle from Vivecraft's radial
 // menu you must first bind it to a real keyboard key in Options -> Controls ->
 // Miscellaneous, then assign that key to a radial slot — Vivecraft can only put
 // KEYBOARD keys on radial slots. See the "How-to" page in the config screen.
+//
+// The keybind lands in the same vanilla Options.keyMappings array on every loader,
+// which is what Vivecraft's radial menu reads — so the radial-slot workflow is
+// unchanged from Fabric.
 // =====================================================================
 public final class VmcKeybinds {
 
@@ -31,8 +39,7 @@ public final class VmcKeybinds {
             // KeyMapping.Category record objects.
             KeyMapping.Category.MISC);
 
-    /** Hand the keybind to the loader. Called once from the bootstrap. */
+    /** No-op on NeoForge — VmcBootstrap registers TOGGLE in RegisterKeyMappingsEvent. */
     public static void init() {
-        KeyMappingHelper.registerKeyMapping(TOGGLE);
     }
 }

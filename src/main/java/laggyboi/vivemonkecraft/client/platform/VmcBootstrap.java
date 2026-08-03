@@ -2,33 +2,75 @@ package laggyboi.vivemonkecraft.client.platform;
 
 import laggyboi.vivemonkecraft.client.VivemonkecraftClient;
 import laggyboi.vivemonkecraft.client.VmcCommands;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
+import laggyboi.vivemonkecraft.client.VmcConfigScreen;
+import net.minecraft.commands.CommandSourceStack;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 // =====================================================================
-// LOADER ENTRY POINT                                       [FABRIC BODY]
+// LOADER ENTRY POINT                                     [NEOFORGE BODY]
 // =====================================================================
 //
 // The ONLY class that knows what a mod entry point looks like on this loader.
 // Everything it does is: register the keybind, register the /vmc command with
-// this loader's command event, and hand off to the shared VivemonkecraftClient.
+// this loader's command event, flush the buffered payload registrations, wire the
+// config screen, and hand off to the shared VivemonkecraftClient.
 //
-// The NeoForge and Forge branches replace this file with an @Mod class that does
-// the same three things through their own events. Nothing else changes.
+// The Fabric branch replaces this file with a ClientModInitializer that does the
+// same things through Fabric's events. Nothing else changes between branches.
+//
+// dist = Dist.CLIENT: this is a client-only mod (the Fabric branch says the same
+// with "environment": "client"). It must still be able to CONNECT to servers that
+// don't have it — see the optional-channel contract in VmcNet.
 // =====================================================================
-public final class VmcBootstrap implements ClientModInitializer {
+@Mod(value = "vivemonkecraft", dist = Dist.CLIENT)
+public final class VmcBootstrap {
 
-    @Override
-    public void onInitializeClient() {
+    public VmcBootstrap(IEventBus modEventBus, ModContainer modContainer) {
 
-        VmcKeybinds.init();
+        // Mod-bus events: payload + keybind registration.
+        modEventBus.addListener(this::registerPayloads);
+        modEventBus.addListener(this::registerKeyMappings);
 
-        // Fabric dispatches client commands with FabricClientCommandSource; the
-        // shared tree is generic over the source type, so it slots straight in.
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
-                dispatcher.register(VmcCommands.<FabricClientCommandSource>build()));
+        // Config screen: NeoForge's equivalent of Mod Menu's config button. Only
+        // offered when Cloth Config is present, exactly as on Fabric — otherwise
+        // clicking it would crash on a missing class.
+        if (VmcConfigScreen.clothPresent()) {
+            modContainer.registerExtensionPoint(IConfigScreenFactory.class,
+                    (container, parent) -> VmcConfigScreen.create(parent));
+        }
 
+        // Game-bus event: the /vmc command. MUST be RegisterClientCommandsEvent, not
+        // RegisterCommandsEvent — this is a CLIENT-ONLY mod, so a server-side command
+        // registration would only exist on the integrated server and /vmc would
+        // silently stop working on dedicated servers. NeoForge dispatches client
+        // commands with CommandSourceStack; the shared tree is generic over the
+        // source type, so it slots straight in.
+        NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event ->
+                event.getDispatcher().register(VmcCommands.<CommandSourceStack>build()));
+
+        // Hand off to the shared client core. This calls VmcNet.register(...), which
+        // BUFFERS the payload block for registerPayloads() below to replay.
         new VivemonkecraftClient().init();
+    }
+
+    @SubscribeEvent
+    private void registerPayloads(RegisterPayloadHandlersEvent event) {
+        // Version "1" is this mod's own protocol version, unrelated to the mod
+        // version. Bump it only if the wire format of a payload changes.
+        VmcNet.flush(event.registrar("1"));
+    }
+
+    @SubscribeEvent
+    private void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(VmcKeybinds.TOGGLE);
     }
 }
