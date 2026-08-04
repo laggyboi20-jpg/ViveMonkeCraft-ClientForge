@@ -1,23 +1,17 @@
 package laggyboi.vivemonkecraft.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import org.lwjgl.glfw.GLFW;
 
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -42,7 +36,7 @@ import static net.minecraft.commands.Commands.literal;
 // must still be able to CONNECT to servers that don't have it — every payload is
 // registered optional() below so the handshake never rejects a vanilla server.
 // =====================================================================
-@Mod(value = "vivemonkecraft", dist = Dist.CLIENT)
+@Mod("vivemonkecraft")
 public class VivemonkecraftClient {
 
     // Is gorilla locomotion currently on? Static so the mixins can read it.
@@ -115,8 +109,8 @@ public class VivemonkecraftClient {
             KeyMapping.Category.MISC
     );
 
-    // NeoForge instantiates this once and injects the mod's event buses.
-    public VivemonkecraftClient(IEventBus modEventBus, ModContainer modContainer) {
+    // Forge instantiates this once via a no-arg @Mod constructor.
+public VivemonkecraftClient() {
 
         handler = new GorillaLocomotionHandler();
 
@@ -129,70 +123,61 @@ public class VivemonkecraftClient {
         // Load the editable config at startup (creates it the first time).
         MovementConfig.load();
 
-        // Mod-bus events: payload + keybind registration must happen on the mod bus.
-        modEventBus.addListener(this::registerPayloads);
-        modEventBus.addListener(this::registerKeyMappings);
+        // Networking: register every payload + handler on the Forge channel (VmcNet).
+        registerPayloads();
 
-        // Config screen: NeoForge's equivalent of Mod Menu's config button. Only
-        // offered when Cloth Config is present, exactly as on Fabric. The check MUST
-        // go through VmcClothConfig — never touch VmcConfigScreen statically here, or
-        // the JVM resolves the Cloth types in its signatures and throws
-        // NoClassDefFoundError on every client without Cloth installed.
-        if (VmcClothConfig.present()) {
-            modContainer.registerExtensionPoint(IConfigScreenFactory.class,
-                    (container, parent) -> VmcConfigScreen.create(parent));
-        }
+        // Keybind registration is a mod-bus event (Forge EventBus 7 static BUS).
+        RegisterKeyMappingsEvent.BUS.addListener(this::registerKeyMappings);
+
+        // Config screen: Forge's OWN "Config" button in the Mods list. Built from pure
+        // VANILLA widgets (VmcForgeConfigScreen), so unlike the old Cloth screen it is
+        // ALWAYS available -- no optional dependency, no presence check.
+        // NOTE (per-version): ConfigScreenHandler.ConfigScreenFactory is the Forge
+        // 1.19-1.21 config-button API; if 26.x renamed it, this is the only call to fix.
+        ModLoadingContext.get().registerExtensionPoint(
+                ConfigScreenHandler.ConfigScreenFactory.class,
+                () -> new ConfigScreenHandler.ConfigScreenFactory(
+                        (minecraft, parent) -> VmcForgeConfigScreen.create(parent)));
 
         // Game-bus events: tick, join, disconnect, and the /vmc client command.
-        NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class,
+        TickEvent.ClientTickEvent.Post.BUS.addListener(
                 e -> onEndTick(Minecraft.getInstance()));
-        NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingIn.class,
-                e -> onClientJoin());
-        NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingOut.class,
-                e -> onClientDisconnect());
-        NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class,
-                this::registerCommands);
+        ClientPlayerNetworkEvent.LoggingIn.BUS.addListener(e -> onClientJoin());
+        ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(e -> onClientDisconnect());
+        RegisterClientCommandsEvent.BUS.addListener(this::registerCommands);
 
-        // Embedded server logic: when THIS client hosts (singleplayer / Open-to-LAN /
-        // Essential), its integrated server plays the role of monke-server. Registers
-        // its own server-side game-bus listeners; the payload TYPES + server handlers
-        // are wired in registerPayloads() below. Harmless on a pure client.
+        // Embedded server logic (integrated / LAN host plays the monke-server role).
         EmbeddedServerLogic.register();
     }
 
     // -----------------------------------------------------------------------
-    // Mod-bus registration
+    // Networking registration (Forge channel via VmcNet)
     // -----------------------------------------------------------------------
 
-    // All payloads are registered here (both directions, type + handler in one call).
-    // .optional() is what lets the client still connect to servers that have NONE of
-    // these channels — "no ServerConfigPayload arrived" is exactly how the mod detects
-    // an un-opted-in server and stays disabled. Version "1" is the wire-format version.
-    private void registerPayloads(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar r = event.registrar("1").optional();
+    // All payloads are OPTIONAL (VmcNet builds the channel with .optional()), which is
+    // what lets the client still connect to servers that have NONE of these channels --
+    // "no ServerConfigPayload arrived" is exactly how the mod detects an un-opted-in
+    // server and stays disabled. Handlers run on the MAIN thread (VmcNet uses addMain).
+    private void registerPayloads() {
+        VmcNet.register(reg -> {
+            // S2C -- the server companion (or our integrated server) sends these.
+            reg.clientbound(ServerConfigPayload.ID, ServerConfigPayload.STREAM_CODEC,
+                    this::onServerConfig);
+            reg.clientbound(MonkeModelS2CPayload.ID, MonkeModelS2CPayload.STREAM_CODEC,
+                    payload -> MonkeModelClientSet.set(payload.player(), payload.enabled()));
 
-        // S2C — the server companion (or our integrated server) sends these.
-        r.playToClient(ServerConfigPayload.ID, ServerConfigPayload.STREAM_CODEC,
-                (payload, ctx) -> ctx.enqueueWork(() -> onServerConfig(payload)));
-        r.playToClient(MonkeModelS2CPayload.ID, MonkeModelS2CPayload.STREAM_CODEC,
-                (payload, ctx) -> ctx.enqueueWork(() ->
-                        MonkeModelClientSet.set(payload.player(), payload.enabled())));
+            // C2S answered by the integrated server (EmbeddedServerLogic) when hosting.
+            reg.serverbound(RealMonkeC2SPayload.ID, RealMonkeC2SPayload.STREAM_CODEC,
+                    EmbeddedServerLogic::onRealMonke);
+            reg.serverbound(MonkeModelC2SPayload.ID, MonkeModelC2SPayload.STREAM_CODEC,
+                    EmbeddedServerLogic::onMonkeModel);
 
-        // C2S answered by the integrated server (EmbeddedServerLogic) when hosting.
-        r.playToServer(RealMonkeC2SPayload.ID, RealMonkeC2SPayload.STREAM_CODEC,
-                (payload, ctx) -> ctx.enqueueWork(() ->
-                        EmbeddedServerLogic.onRealMonke(ctx.player(), payload)));
-        r.playToServer(MonkeModelC2SPayload.ID, MonkeModelC2SPayload.STREAM_CODEC,
-                (payload, ctx) -> ctx.enqueueWork(() ->
-                        EmbeddedServerLogic.onMonkeModel(ctx.player(), payload)));
-
-        // C2S answered ONLY by the separate dedicated-server companion. The TYPE must
-        // still be registered so the client can send it (and canSend() sees a channel);
-        // the integrated server needs no handler — singleplayer/LAN does this locally.
-        r.playToServer(WallSlideC2SPayload.ID, WallSlideC2SPayload.STREAM_CODEC,
-                (payload, ctx) -> { });
-        r.playToServer(MagmaTouchC2SPayload.ID, MagmaTouchC2SPayload.STREAM_CODEC,
-                (payload, ctx) -> { });
+            // C2S answered ONLY by the separate dedicated-server companion. The TYPE must
+            // still be registered so the client can send it (and canSend sees a channel);
+            // the integrated server needs no handler.
+            reg.serverboundNoHandler(WallSlideC2SPayload.ID, WallSlideC2SPayload.STREAM_CODEC);
+            reg.serverboundNoHandler(MagmaTouchC2SPayload.ID, MagmaTouchC2SPayload.STREAM_CODEC);
+        });
     }
 
     private void registerKeyMappings(RegisterKeyMappingsEvent event) {
@@ -343,8 +328,7 @@ public class VivemonkecraftClient {
     // Client -> server helpers (NeoForge). canSend mirrors Fabric's
     // ClientPlayNetworking.canSend: false when the other end has no receiver.
     private static boolean canSend(CustomPacketPayload.Type<?> id) {
-        var connection = Minecraft.getInstance().getConnection();
-        return connection != null && connection.hasChannel(id);
+        return VmcNet.canSendToServer(id);
     }
 
     // -----------------------------------------------------------------------
@@ -438,7 +422,7 @@ public class VivemonkecraftClient {
             lastMonkeModel = model;
             MonkeModelClientSet.set(client.player.getUUID(), model);
             if (canSend(MonkeModelC2SPayload.ID)) {
-                ClientPacketDistributor.sendToServer(new MonkeModelC2SPayload(model));
+                VmcNet.sendToServer(new MonkeModelC2SPayload(model));
             }
         }
 
@@ -473,7 +457,7 @@ public class VivemonkecraftClient {
         // handler.) Sent each touching tick; hurt invulnerability frames throttle it.
         if (magmaNow && !client.hasSingleplayerServer()
                 && canSend(MagmaTouchC2SPayload.ID)) {
-            ClientPacketDistributor.sendToServer(MagmaTouchC2SPayload.INSTANCE);
+            VmcNet.sendToServer(MagmaTouchC2SPayload.INSTANCE);
         }
     }
 
@@ -485,11 +469,11 @@ public class VivemonkecraftClient {
         if (!canSend(WallSlideC2SPayload.ID)) return;
         if (gripping) {
             if (!wallSlideSent) VmcDebugLog.event("NET", "→ WallSlide(true) [no-fall-damage]");
-            ClientPacketDistributor.sendToServer(new WallSlideC2SPayload(true));
+            VmcNet.sendToServer(new WallSlideC2SPayload(true));
             wallSlideSent = true;
         } else if (wallSlideSent) {
             VmcDebugLog.event("NET", "→ WallSlide(false)");
-            ClientPacketDistributor.sendToServer(new WallSlideC2SPayload(false));
+            VmcNet.sendToServer(new WallSlideC2SPayload(false));
             wallSlideSent = false;
         }
     }
@@ -514,7 +498,7 @@ public class VivemonkecraftClient {
             });
         } else if (ServerLimits.packetReceived
                 && canSend(RealMonkeC2SPayload.ID)) {
-            ClientPacketDistributor.sendToServer(new RealMonkeC2SPayload(on));
+            VmcNet.sendToServer(new RealMonkeC2SPayload(on));
         }
     }
 
