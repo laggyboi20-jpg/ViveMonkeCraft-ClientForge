@@ -2,84 +2,61 @@ package laggyboi.vivemonkecraft.client.platform;
 
 import laggyboi.vivemonkecraft.client.VivemonkecraftClient;
 import laggyboi.vivemonkecraft.client.VmcCommands;
-import laggyboi.vivemonkecraft.client.VmcClothConfig;
-import laggyboi.vivemonkecraft.client.VmcConfigScreen;
 import net.minecraft.commands.CommandSourceStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.fml.ModLoadingContext;
+import laggyboi.vivemonkecraft.client.VmcForgeConfigScreen;
 
 // =====================================================================
-// LOADER ENTRY POINT                                     [NEOFORGE BODY]
+// LOADER ENTRY POINT                                         [FORGE BODY]
 // =====================================================================
 //
 // The ONLY class that knows what a mod entry point looks like on this loader.
 // Everything it does is: register the keybind, register the /vmc command with
-// this loader's command event, flush the buffered payload registrations, wire the
-// config screen, and hand off to the shared VivemonkecraftClient.
+// this loader's command event, and hand off to the shared VivemonkecraftClient.
 //
-// The Fabric branch replaces this file with a ClientModInitializer that does the
-// same things through Fabric's events. Nothing else changes between branches.
+// The Fabric branch replaces this file with a ClientModInitializer and the
+// NeoForge branch with a @Mod(dist = CLIENT) constructor. Nothing else changes
+// between branches.
 //
-// dist = Dist.CLIENT: this is a client-only mod (the Fabric branch says the same
-// with "environment": "client"). It must still be able to CONNECT to servers that
-// don't have it — see the optional-channel contract in VmcNet.
+// NO CONFIG SCREEN HERE: Cloth Config has no Forge build for Minecraft 26.x, so
+// VmcConfigScreen is excluded from compilation on this branch (see build.gradle).
+// Forge users configure via config/vivemonkecraft.properties, "/vmc reload" and
+// "/vmc set <setting> <value>" (which tab-completes every setting name).
+//
+// Client-only: unlike NeoForge there is no dist attribute on Forge's @Mod, so
+// this mod is kept off servers by mods.toml (displayTest + CLIENT-side deps) and
+// by simply never touching server-only code paths. It must still be able to
+// CONNECT to servers that don't have it — see the optional-channel contract in
+// VmcNet.
 // =====================================================================
-@Mod(value = "vivemonkecraft", dist = Dist.CLIENT)
+@Mod("vivemonkecraft")
 public final class VmcBootstrap {
 
-    public VmcBootstrap(IEventBus modEventBus, ModContainer modContainer) {
+    public VmcBootstrap() {
 
-        // Mod-bus events: payload + keybind registration.
-        modEventBus.addListener(this::registerPayloads);
-        modEventBus.addListener(this::registerKeyMappings);
+        VmcKeybinds.init();
 
-        // Config screen: NeoForge's equivalent of Mod Menu's config button. Only
-        // offered when Cloth Config is present, exactly as on Fabric.
-        //
-        // The check MUST go through VmcClothConfig, never VmcConfigScreen. Touching
-        // any static member of VmcConfigScreen makes the JVM verify it, which
-        // resolves the Cloth types in its signatures and throws
-        // NoClassDefFoundError: me/shedaniel/clothconfig2/api/AbstractConfigListEntry
-        // right here in the constructor, killing mod construction on every instance
-        // that doesn't have Cloth installed. (That is exactly what happened the
-        // first time this branch was run.) The lambda below is only ever created
-        // once we already know Cloth is present.
-        if (VmcClothConfig.present()) {
-            modContainer.registerExtensionPoint(IConfigScreenFactory.class,
-                    (container, parent) -> VmcConfigScreen.create(parent));
-        }
-
-        // Game-bus event: the /vmc command. MUST be RegisterClientCommandsEvent, not
-        // RegisterCommandsEvent — this is a CLIENT-ONLY mod, so a server-side command
-        // registration would only exist on the integrated server and /vmc would
-        // silently stop working on dedicated servers. NeoForge dispatches client
+        // MUST be RegisterClientCommandsEvent, not RegisterCommandsEvent — this is
+        // a client-only mod, so a server-side registration would leave /vmc working
+        // in singleplayer but dead on dedicated servers. Forge dispatches client
         // commands with CommandSourceStack; the shared tree is generic over the
         // source type, so it slots straight in.
-        NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, event ->
+        RegisterClientCommandsEvent.BUS.addListener(event ->
                 event.getDispatcher().register(VmcCommands.<CommandSourceStack>build()));
 
-        // Hand off to the shared client core. This calls VmcNet.register(...), which
-        // BUFFERS the payload block for registerPayloads() below to replay.
+        // Config screen: Forge's OWN "Config" button in the Mods list. Built from
+        // pure VANILLA widgets (VmcForgeConfigScreen), so unlike the Cloth screen it
+        // needs no dependency and is always available on Forge.
+        // NOTE (per-version): ConfigScreenHandler.ConfigScreenFactory is the Forge
+        // 1.19-1.21 config-button API; if 26.x renamed it, this is the only call to fix.
+        ModLoadingContext.get().registerExtensionPoint(
+                ConfigScreenHandler.ConfigScreenFactory.class,
+                () -> new ConfigScreenHandler.ConfigScreenFactory(
+                        (minecraft, parent) -> VmcForgeConfigScreen.create(parent)));
+
         new VivemonkecraftClient().init();
-    }
-
-    @SubscribeEvent
-    private void registerPayloads(RegisterPayloadHandlersEvent event) {
-        // Version "1" is this mod's own protocol version, unrelated to the mod
-        // version. Bump it only if the wire format of a payload changes.
-        VmcNet.flush(event.registrar("1"));
-    }
-
-    @SubscribeEvent
-    private void registerKeyMappings(RegisterKeyMappingsEvent event) {
-        event.register(VmcKeybinds.TOGGLE);
     }
 }

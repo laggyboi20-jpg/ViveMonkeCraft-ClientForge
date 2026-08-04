@@ -1,14 +1,15 @@
 package laggyboi.vivemonkecraft.client.platform;
 
-import net.neoforged.fml.ModList;
-import net.neoforged.fml.loading.FMLPaths;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.forgespi.language.IModInfo;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
 
 // =====================================================================
-// PLATFORM — loader paths + mod queries                  [NEOFORGE BODY]
+// PLATFORM — loader paths + mod queries                      [FORGE BODY]
 // =====================================================================
 //
 // One of the four small classes that isolate everything loader-specific.
@@ -38,38 +39,56 @@ public final class VmcPlatform {
      * True if a mod with this id is present.
      *
      * NOTE the id spelling difference between loaders: Cloth Config is
-     * "cloth-config" on Fabric but "cloth_config" on NeoForge (NeoForge mod ids
-     * can't contain hyphens). Callers pass BOTH spellings, so this needs no
+     * "cloth-config" on Fabric but "cloth_config" on Forge/NeoForge, whose mod
+     * ids can't contain hyphens. Callers pass BOTH spellings, so this needs no
      * translation — but don't "tidy" the caller into checking only one.
      */
+    // NOTE: unlike NeoForge (ModList.get().isLoaded(...)), Forge 26.x's ModList is
+    // entirely STATIC — there is no get(). Every method below is wrapped in a
+    // try/catch because these are also called from the debug logger, which must
+    // never throw: it can run before the mod list is populated.
     public static boolean isModLoaded(String id) {
-        return ModList.get() != null && ModList.get().isLoaded(id);
+        try {
+            return ModList.isLoaded(id);
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** Friendly version string for a mod id, or "absent" when it isn't installed. */
     public static String modVersion(String id) {
-        if (ModList.get() == null) return "absent";
-        return ModList.get().getModContainerById(id)
-                .map(c -> c.getModInfo().getVersion().toString())
-                .orElse("absent");
+        try {
+            return ModList.getModContainerById(id)
+                    .map(c -> c.getModInfo().getVersion().toString())
+                    .orElse("absent");
+        } catch (Throwable t) {
+            return "absent";
+        }
     }
 
     /** The loader's own id/version, for the debug env dump header. */
     public static String loaderName() {
-        return "neoforge " + modVersion("neoforge");
+        return "forge " + modVersion("forge");
     }
 
     /** Total loaded mod count — debug env dump. */
     public static int modCount() {
-        return ModList.get() == null ? 0 : ModList.get().getMods().size();
+        try {
+            return ModList.size();
+        } catch (Throwable t) {
+            return 0;
+        }
     }
 
     /** "<id> <version>" for every loaded mod, sorted by id — debug env dump. */
     public static List<String> allMods() {
-        if (ModList.get() == null) return List.of();
-        return ModList.get().getMods().stream()
-                .sorted(java.util.Comparator.comparing(m -> m.getModId()))
-                .map(m -> m.getModId() + " " + m.getVersion().toString())
-                .collect(Collectors.toList());
+        try {
+            return ModList.getMods().stream()
+                    .sorted(java.util.Comparator.comparing(IModInfo::getModId))
+                    .map(m -> m.getModId() + " " + m.getVersion().toString())
+                    .collect(Collectors.toList());
+        } catch (Throwable t) {
+            return List.of();
+        }
     }
 }
