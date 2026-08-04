@@ -2,8 +2,7 @@ package laggyboi.vivemonkecraft.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 
 // =====================================================================
 // CAMERA STABILIZATION RENDERER  (QuestCraft / Vivecraft)
@@ -36,7 +35,7 @@ public final class CameraStabilizationRenderer {
     private static float smoothFactor = 0.0f;
 
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class,
+        RenderLevelStageEvent.BUS.addListener(
                 CameraStabilizationRenderer::onWorldRender);
     }
 
