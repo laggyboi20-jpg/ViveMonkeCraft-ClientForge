@@ -3,9 +3,7 @@ package laggyboi.vivemonkecraft.client;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 
 import java.util.Set;
 import java.util.UUID;
@@ -52,23 +50,23 @@ public final class EmbeddedServerLogic {
 
     public static void register() {
         // Authorize every joiner + replay the current monke-model set to them.
-        NeoForge.EVENT_BUS.addListener(PlayerEvent.PlayerLoggedInEvent.class, event -> {
+        PlayerEvent.PlayerLoggedInEvent.BUS.addListener(event -> {
             if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
             // Unrestricted config — a LAN game among friends needs no caps. (Wire
             // format must match ServerConfigPayload: modEnabled, then 10 doubles.)
-            PacketDistributor.sendToPlayer(player, new ServerConfigPayload(
+            VmcNet.sendToPlayer(player, new ServerConfigPayload(
                     true,        // modEnabled
                     0.0,         // maxJumpSpeed (no hard cap)
                     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,   // allowances unset
                     -1.0, -1.0)); // gravity / air-friction minimums unset
 
             for (UUID u : monkeModelPlayers) {
-                PacketDistributor.sendToPlayer(player, new MonkeModelS2CPayload(u, true));
+                VmcNet.sendToPlayer(player, new MonkeModelS2CPayload(u, true));
             }
         });
 
-        NeoForge.EVENT_BUS.addListener(PlayerEvent.PlayerLoggedOutEvent.class, event -> {
+        PlayerEvent.PlayerLoggedOutEvent.BUS.addListener(event -> {
             if (!(event.getEntity() instanceof ServerPlayer player)) return;
             UUID id = player.getUUID();
             realMonkePlayers.remove(id);
@@ -77,7 +75,7 @@ public final class EmbeddedServerLogic {
                 MinecraftServer server = player.getServer();
                 if (server != null) {
                     for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                        PacketDistributor.sendToPlayer(p, off);
+                        VmcNet.sendToPlayer(p, off);
                     }
                 }
             }
@@ -106,7 +104,7 @@ public final class EmbeddedServerLogic {
         MinecraftServer server = player.getServer();
         if (server != null) {
             for (ServerPlayer pp : server.getPlayerList().getPlayers()) {
-                PacketDistributor.sendToPlayer(pp, sync);
+                VmcNet.sendToPlayer(pp, sync);
             }
         }
     }

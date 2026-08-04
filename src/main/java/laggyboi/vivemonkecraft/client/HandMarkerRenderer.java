@@ -6,8 +6,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 
 // =====================================================================
@@ -68,7 +67,7 @@ public final class HandMarkerRenderer {
     // =========================================================================
 
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class, HandMarkerRenderer::onRender);
+        RenderLevelStageEvent.BUS.addListener( HandMarkerRenderer::onRender);
     }
 
     // =========================================================================
