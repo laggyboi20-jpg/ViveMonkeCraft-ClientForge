@@ -1,8 +1,9 @@
 plugins {
-    id 'java-library'
+    id 'java'
+    id 'idea'
     id 'maven-publish'
-    // ModDevGradle 2 — the current NeoForge build plugin (replaces NeoGradle).
-    id 'net.neoforged.moddev' version "${moddev_version}"
+    // ForgeGradle 7 — the build plugin for modern (1.21.x / 26.x) Forge.
+    id 'net.minecraftforge.gradle' version '[7.0.17,8)'
 }
 
 version = project.mod_version
@@ -12,45 +13,28 @@ base {
     archivesName = project.archives_base_name
 }
 
-neoForge {
-    version = project.neo_version
-
-    // NeoForge always runs on Mojang mappings, on EVERY Minecraft version — so even
-    // though 1.21.4 is an obfuscated MC, the mixins here need no refmap and are
-    // identical to the Fabric branch's (which used loom.officialMojangMappings()).
-    // That is why no mappings/parchment block is required.
-
-    runs {
-        client {
-            client()
-        }
-    }
-
-    mods {
-        "vivemonkecraft" {
-            sourceSet sourceSets.main
-        }
-    }
-}
-
 repositories {
-    // Cloth Config (the slider/toggle widgets the config screen is built from)
-    maven { url = "https://maven.shedaniel.me/" }
+    // REQUIRED by ForgeGradle 7: the "mavenizer" is FG's local repository holding
+    // the patched/recompiled Minecraft+Forge artifact it builds on first run.
+    // Without this line the forge dependency below resolves to ZERO files and every
+    // net.minecraft.* import fails with a misleading "package does not exist".
+    minecraft.mavenizer(delegate)
+    mavenCentral()
+    maven { url = "https://maven.minecraftforge.net/" }
+    // Mojang's own library host — Minecraft's transitive deps (authlib, brigadier,
+    // datafixerupper, ...) are published here and nowhere else.
+    maven { url = "https://libraries.minecraft.net/" }
 }
 
 dependencies {
-    // Cloth Config, NeoForge flavour. compileOnly + runtime-optional: the mod checks
-    // VmcClothConfig.present() before ever touching a Cloth type, so it runs fine
-    // without Cloth installed and simply offers no config screen.
-    //
-    // NOTE: Vivecraft is deliberately NOT a dependency here. VivecraftBridge talks to
-    // it purely by reflection, which is exactly why this port needed no new VR API
-    // sourcing — Vivecraft's org.vivecraft.* classes are identical on Fabric and
-    // NeoForge.
-    // compileOnly, not implementation: Cloth must NOT be bundled or hard-required.
-    // Players install it themselves; without it the mod runs and just doesn't offer a
-    // config screen. Add it to a dev run's mods folder if you want to see the GUI.
-    compileOnly "me.shedaniel.cloth:cloth-config-neoforge:${cloth_version}"
+    // No mappings block: 26.1+ Minecraft ships DEOBFUSCATED (Mojang names), which
+    // is also why the mixins need no refmap and are identical to the other branches.
+    implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+
+    // NO Cloth Config: it has no Forge build for 1.21.4+/26.x. The config screen on
+    // this branch (VmcForgeConfigScreen) is built from pure VANILLA widgets and needs
+    // no dependency. Vivecraft is absent too, on purpose: VivecraftBridge reaches it
+    // by reflection, which is why this port needed no VR API on any loader.
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -59,7 +43,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    // Minecraft 1.21.4 ships Java 21 to end users.
     toolchain.languageVersion = JavaLanguageVersion.of(21)
     withSourcesJar()
 }
@@ -68,16 +51,31 @@ processResources {
     def expandProps = [
             "version"          : project.version,
             "minecraft_version": project.minecraft_version,
-            "neo_version"      : project.neo_version
+            "forge_version"    : project.forge_version
     ]
     inputs.properties(expandProps)
     filteringCharset "UTF-8"
-    filesMatching(["META-INF/neoforge.mods.toml"]) {
+    filesMatching(["META-INF/mods.toml"]) {
         expand expandProps
     }
 }
 
 jar {
+    manifest {
+        attributes([
+                // MixinConfigs is how FORGE discovers mixin configs -- it does NOT
+                // read a [[mixins]] table from mods.toml the way NeoForge does.
+                // Without this line the jar loads but NONE of the mixins apply, so the
+                // mod does nothing. Comma-separate if more configs are ever added.
+                "MixinConfigs"          : "vivemonkecraft.client.mixins.json",
+                "Specification-Title"   : "vivemonkecraft",
+                "Specification-Vendor"  : "Laggyboi",
+                "Specification-Version" : "1",
+                "Implementation-Title"  : project.name,
+                "Implementation-Version": project.version,
+                "Implementation-Vendor" : "Laggyboi"
+        ])
+    }
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
     }

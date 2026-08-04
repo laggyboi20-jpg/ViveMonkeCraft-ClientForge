@@ -11,8 +11,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.CoreShaders;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 
@@ -51,7 +50,7 @@ public final class CameraStabilizationRenderer {
     private static float smoothFactor = 0.0f;
 
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.class,
+        RenderLevelStageEvent.BUS.addListener(
                 CameraStabilizationRenderer::onWorldRender);
     }
 

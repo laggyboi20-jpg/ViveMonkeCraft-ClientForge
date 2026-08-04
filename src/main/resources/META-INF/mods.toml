@@ -1,0 +1,56 @@
+# =============================================================================
+# FORGE mods.toml  --  NOT interchangeable with NeoForge's neoforge.mods.toml
+# =============================================================================
+# Three differences that Forge requires (verified against fmlloader's ModInfo /
+# ModFileInfo classes), each of which makes NeoForge's spelling fail with the
+# unhelpful "Mod candidate contains broken toml":
+#   1. Dependencies use  mandatory = true/false,  NOT type = "required".
+#   2. Client-only is declared with root-level clientSideOnly, NOT displayTest.
+#   3. There is NO [[mixins]] table. Forge finds mixin configs through the
+#      "MixinConfigs" JAR MANIFEST attribute (see the jar{} block in build.gradle).
+# (This file goes through Gradle's expand(); a literal dollar sign anywhere,
+# comments included, is read as a template variable. Only the ${...} placeholders
+# below may use one.)
+# =============================================================================
+
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+issueTrackerURL = "https://github.com/Laggyboi/ViveMonkeCraft"
+
+# Client-only mod: Forge's analogue of "environment": "client" (Fabric) /
+# dist = Dist.CLIENT (NeoForge). Stops servers flagging the client as mismatched.
+# The mod must still be able to CONNECT to servers lacking it -- see the
+# optional-channel contract in VmcNet.
+clientSideOnly = true
+
+[[mods]]
+modId = "vivemonkecraft"
+version = "${version}"
+displayName = "ViveMonkeCraft"
+authors = "Laggyboi"
+logoFile = "assets/vivemonkecraft/icon.png"
+description = '''
+Gorilla Tag-style VR locomotion for Minecraft ${minecraft_version}. Requires Vivecraft (PCVR).
+Grab surfaces with your hands and swing through the world.
+
+Configure it from the "Config" button next to ViveMonkeCraft in the Mods list, or
+with config/vivemonkecraft.properties, "/vmc reload" and "/vmc set <setting> <value>".
+'''
+
+[[dependencies.vivemonkecraft]]
+modId = "forge"
+mandatory = true
+versionRange = "[${forge_version},)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.vivemonkecraft]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[${minecraft_version},)"
+ordering = "NONE"
+side = "CLIENT"
+
+# Vivecraft is NOT a declared dependency on purpose: VivecraftBridge reaches it
+# entirely by reflection and degrades to "no VR" when absent, as on every branch.

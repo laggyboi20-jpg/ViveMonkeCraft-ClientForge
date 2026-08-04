@@ -1,6 +1,6 @@
 package laggyboi.vivemonkecraft.client;
 
-import net.neoforged.fml.loading.FMLPaths;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
