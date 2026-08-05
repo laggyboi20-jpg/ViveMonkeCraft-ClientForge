@@ -2,59 +2,45 @@ package laggyboi.vivemonkecraft.client;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.OptionsList;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
 // =====================================================================
-// CONFIG SCREEN  (Forge — VANILLA widgets, no Cloth)
+// CONFIG SCREEN  (Forge — VANILLA widgets, no Cloth)   ***26.x variant***
 // =====================================================================
 //
-// Cloth Config has NO Forge build for Minecraft 1.21.4+ / 26.x (shedaniel's maven
-// stops at cloth-config-forge 15.x, ~1.21.1). So the Cloth-based VmcConfigScreen
-// cannot compile on Forge. This is its replacement, built entirely from VANILLA
-// widgets so it depends on nothing but Minecraft itself and works on every Forge
-// version in the 1.21.4 -> 26.2 range.
+// Cloth Config has NO Forge build for Minecraft 1.21.4+ / 26.x, so the config
+// screen is built from vanilla widgets only. On the 26.x line Mojang reworked the
+// GUI: `GuiGraphics` was removed (render-state extraction model) and `OptionsList`
+// is now tied to `OptionsSubScreen`, so this screen extends OptionsSubScreen — the
+// base owns the scrolling OptionsList, the title/background render, the "Done"
+// footer button and the return-to-parent navigation, none of which we hand-roll.
 //
-// It is opened from Forge's OWN "Config" button in the Mods list — registered
-// through ConfigScreenHandler.ConfigScreenFactory in the mod entry point (see
-// VivemonkecraftClient / VmcBootstrap). That is the loader's native mod-menu hook;
-// Forge just doesn't auto-BUILD the screen the way NeoForge does, so we build it.
-//
-// Design (per user choice): a CLEAN SINGLE-PAGE menu — every setting is a vanilla
-// slider (doubles) or on/off toggle (booleans) with a tooltip, in one scrollable
-// OptionsList, plus a preset selector at the top. No category tabs, no per-row
-// reset arrows (that was Cloth-only chrome). Values are written straight into the
-// MovementConfig static fields as you change them, and saved to
+// Every setting is a vanilla slider (doubles) or on/off toggle (booleans) with a
+// tooltip, added to `this.list` in addOptions(); a preset selector sits at the top
+// as a CycleButton row. Values are written straight into MovementConfig as you
+// change them (via each option's ValueUpdateListener) and saved to
 // config/vivemonkecraft.properties when the screen closes.
 //
-// ---------------------------------------------------------------------
-// PER-VERSION RISK (vanilla GUI is the most version-volatile surface in MC):
-//   * OptionsList constructor: uses the (Minecraft, width, height, y, itemHeight)
-//     5-arg form (1.20.5+). Older/newer signatures differ — if it won't compile,
-//     this line is the first thing to adjust.
-//   * OptionInstance.UnitDouble / noTooltip / cachedConstantTooltip / createBoolean
-//     have been stable across 1.20.2 -> 1.21.x; 26.x is the most likely to have
-//     renamed or reshaped one of them. All are isolated in the two helpers below.
-// ---------------------------------------------------------------------
+// NOTE: this is the 26.x-only port. The 1.21.4–1.21.11 branches keep the older
+// Screen/GuiGraphics-based VmcForgeConfigScreen (their vanilla GUI API differs).
 // =====================================================================
-public final class VmcForgeConfigScreen extends Screen {
+public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
-    private final Screen parent;
-    private OptionsList list;
     private String pendingPreset = "— None —";
 
     public VmcForgeConfigScreen(Screen parent) {
-        super(Component.literal("ViveMonkeCraft — Gorilla Locomotion"));
-        this.parent = parent;
+        super(parent, Minecraft.getInstance().options,
+                Component.literal("ViveMonkeCraft — Gorilla Locomotion"));
     }
 
     /** Registered as the Forge config-screen factory target. */
@@ -64,35 +50,24 @@ public final class VmcForgeConfigScreen extends Screen {
     }
 
     @Override
-    protected void init() {
-        // Preset selector across the top. Choosing a value applies that preset to the
-        // MovementConfig fields immediately and rebuilds the list so the sliders show
-        // the new values. "— None —" leaves everything untouched.
-        CycleButton<String> presetButton = CycleButton.<String>builder(s -> Component.literal(s))
+    protected void addOptions() {
+        // Preset selector as the first row. Choosing a value applies that preset to
+        // the MovementConfig fields immediately and rebuilds the screen so every
+        // slider re-reads its new value. "— None —" leaves everything untouched.
+        CycleButton<String> presetButton = CycleButton.<String>builder(Component::literal, pendingPreset)
                 .withValues(List.of("— None —", "tutorial", "Default", "Long Arms", "Zero Gravity", "Speed Run"))
-                .withInitialValue(pendingPreset)
-                .withTooltip(s -> switch (s) {
-                    case "tutorial"     -> tip("Everything that helps a new player turned on.");
-                    case "Default"      -> tip("Reset all settings to factory defaults.");
-                    case "Long Arms"    -> tip("Authentic Gorilla Tag feel: longer arms, punchier throws.");
-                    case "Zero Gravity" -> tip("Float after letting go; space-like movement.");
-                    case "Speed Run"    -> tip("Very powerful launches, low air drag.");
-                    default             -> null;
-                })
-                .create(this.width / 2 - 155, 28, 310, 20, Component.literal("Preset"),
+                .create(0, 0, 310, 20, Component.literal("Preset"),
                         (btn, value) -> {
                             pendingPreset = value;
                             if (!value.equals("— None —")) {
                                 applyPreset(value);
                                 MovementConfig.activePreset = value;
                             }
-                            this.rebuild();
+                            this.rebuildWidgets();
                         });
-        this.addRenderableWidget(presetButton);
-
-        // The scrolling list of every setting. 5-arg constructor: (mc, width, height,
-        // y, itemHeight). Leaves 56px of header (title + preset) and 32px of footer.
-        this.list = new OptionsList(this.minecraft, this.width, this.height - 56 - 32, 56, 25);
+        // 26.1.x OptionsList has no addBig(AbstractWidget) overload (26.2 added it),
+        // so the preset goes in as a "small" (half-width) row instead.
+        this.list.addSmall(presetButton, (AbstractWidget) null);
 
         // ---- Movement ----
         this.list.addBig(toggle("Step assist teleports", MovementConfig.stepTeleport,
@@ -233,49 +208,28 @@ public final class VmcForgeConfigScreen extends Screen {
 
         // ---- Debug ----
         this.list.addBig(toggle("Debug logging", MovementConfig.debugLogging,
-                "Write a trace to logs/vivemonkecraft-debug.log. Performance heavy — not recommended on Quest.",
+                "Write a trace to logs/vivemonkecraft-debug.log. Performance heavy.",
                 v -> MovementConfig.debugLogging = v));
         this.list.addBig(toggle("Show hand markers", MovementConfig.showHandMarkers,
                 "Render split arm lines at your hands. Green = touching a block, red = not.",
                 v -> MovementConfig.showHandMarkers = v));
-
-        this.addRenderableWidget(this.list);
-
-        this.addRenderableWidget(Button.builder(Component.literal("Done"), b -> this.onClose())
-                .bounds(this.width / 2 - 100, this.height - 27, 200, 20)
-                .build());
-    }
-
-    // Rebuild the whole screen (after a preset is applied) so every slider re-reads
-    // its MovementConfig value.
-    private void rebuild() {
-        this.clearWidgets();
-        this.init();
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        super.render(g, mouseX, mouseY, partialTick);
-        g.drawCenteredString(this.font, this.title, this.width / 2, 12, 0xFFFFFF);
     }
 
     @Override
     public void onClose() {
-        // Persist everything the sliders/toggles wrote into the static fields.
+        // Persist everything the sliders/toggles wrote into the static fields, then
+        // let the base class apply unsaved changes and return to the parent screen.
         MovementConfig.save();
-        this.minecraft.setScreen(this.parent);
+        super.onClose();
     }
 
     // -----------------------------------------------------------------------
     // Vanilla-widget helpers — the only two places that touch OptionInstance.
     // -----------------------------------------------------------------------
 
-    private static Component tip(String s) {
-        return Component.literal(s);
-    }
-
     /** An on/off toggle bound to a boolean field. */
-    private static OptionInstance<Boolean> toggle(String label, boolean current, String tooltip, java.util.function.Consumer<Boolean> setter) {
+    private static OptionInstance<Boolean> toggle(String label, boolean current, String tooltip,
+                                                  Consumer<Boolean> setter) {
         return OptionInstance.createBoolean(
                 label,
                 OptionInstance.cachedConstantTooltip(Component.literal(tooltip)),
@@ -287,7 +241,8 @@ public final class VmcForgeConfigScreen extends Screen {
      * A slider bound to a double field over [min, max]. Vanilla's UnitDouble slider
      * runs 0..1; we map that onto the real range and show the real value in the label.
      */
-    private static OptionInstance<Double> slider(String label, double min, double max, double current, String tooltip, DoubleConsumer setter) {
+    private static OptionInstance<Double> slider(String label, double min, double max, double current,
+                                                 String tooltip, DoubleConsumer setter) {
         double t0 = Mth.clamp((current - min) / (max - min), 0.0, 1.0);
         return new OptionInstance<>(
                 label,
