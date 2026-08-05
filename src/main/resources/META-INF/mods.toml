@@ -9,8 +9,9 @@
 #   3. There is NO [[mixins]] table. Forge finds mixin configs through the
 #      "MixinConfigs" JAR MANIFEST attribute (see the jar{} block in build.gradle).
 # (This file goes through Gradle's expand(); a literal dollar sign anywhere,
-# comments included, is read as a template variable. Only the ${...} placeholders
-# below may use one.)
+# comments included, is read as a template variable. Only the intended
+# placeholders below may use one -- do NOT write a dollar-brace sequence in a
+# comment, it is parsed as an expression and fails the build.)
 # =============================================================================
 
 modLoader = "javafml"
