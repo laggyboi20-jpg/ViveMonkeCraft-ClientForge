@@ -49,7 +49,7 @@ side = "CLIENT"
 [[dependencies.vivemonkecraft]]
 modId = "minecraft"
 mandatory = true
-versionRange = "[${minecraft_version},)"
+versionRange = "${minecraft_range}"
 ordering = "NONE"
 side = "CLIENT"
 

@@ -2,6 +2,7 @@ package laggyboi.vivemonkecraft.client;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 
 import net.minecraft.client.Minecraft;
@@ -11,6 +12,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import laggyboi.vivemonkecraft.client.cosmetics.Cosmetic;
+import laggyboi.vivemonkecraft.client.cosmetics.Cosmetics;
 
 // =====================================================================
 // CONFIG SCREEN  (Forge — VANILLA widgets, no Cloth)   ***26.x variant***
@@ -29,8 +32,8 @@ import net.minecraft.util.Mth;
 // change them (via each option's ValueUpdateListener) and saved to
 // config/vivemonkecraft.properties when the screen closes.
 //
-// NOTE: this is the 26.x-only port. The 1.21.4–1.21.11 branches keep the older
-// Screen/GuiGraphics-based VmcForgeConfigScreen (their vanilla GUI API differs).
+// One file for every version: the few vanilla GUI calls that changed between
+// 1.21.x, 26.1 and 26.2 are //? blocks (preset button, toggle setter type).
 // =====================================================================
 public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
@@ -52,18 +55,34 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         // Preset selector as the first row. Choosing a value applies that preset to
         // the MovementConfig fields immediately and rebuilds the screen so every
         // slider re-reads its new value. "— None —" leaves everything untouched.
+        List<String> presetChoices = new java.util.ArrayList<>();
+        presetChoices.add("— None —");
+        presetChoices.addAll(List.of(MovementConfig.PRESET_NAMES));
+        CycleButton.OnValueChange<String> onPreset = (btn, value) -> {
+            pendingPreset = value;
+            if (!value.equals("— None —")) {
+                MovementConfig.applyPreset(value);
+                MovementConfig.activePreset = value;
+            }
+            this.rebuildWidgets();
+        };
+        // 1.21.11 made the builder take the initial value (withInitialValue is gone).
+        //? if >=1.21.11 {
         CycleButton<String> presetButton = CycleButton.<String>builder(Component::literal, pendingPreset)
-                .withValues(List.of("— None —", "tutorial", "Default", "Long Arms", "Zero Gravity", "Speed Run"))
-                .create(0, 0, 310, 20, Component.literal("Preset"),
-                        (btn, value) -> {
-                            pendingPreset = value;
-                            if (!value.equals("— None —")) {
-                                applyPreset(value);
-                                MovementConfig.activePreset = value;
-                            }
-                            this.rebuildWidgets();
-                        });
+                .withValues(presetChoices)
+                .create(0, 0, 310, 20, Component.literal("Preset"), onPreset);
+        //?} else {
+        /*CycleButton<String> presetButton = CycleButton.<String>builder(Component::literal)
+                .withValues(presetChoices)
+                .withInitialValue(pendingPreset)
+                .create(0, 0, 310, 20, Component.literal("Preset"), onPreset);
+        *///?}
+        // Only 26.2+ has addBig(AbstractWidget); before that a lone widget is a
+        // small row with an empty right half.
+        //? if >=26.2 {
         this.list.addBig(presetButton);
+        //?} else
+        /*this.list.addSmall(presetButton, null);*/
 
         // ---- Movement ----
         this.list.addBig(toggle("Step assist teleports", MovementConfig.stepTeleport,
@@ -172,7 +191,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 v -> MovementConfig.punchMiningNoTool = v));
         this.list.addBig(toggle("Magma block sides hurt", MovementConfig.magmaTouchDamage,
                 "Grabbing a magma block on any face deals the hot-floor damage. Fire resistance negates it.",
-                v -> MovementConfig.magmaTouchDamage = v));
+                v -> MovementConfig.stepTeleport = v));
 
         // ---- GT physics ----
         this.list.addBig(toggle("GT physics beta (anchor mode)", MovementConfig.gtPhysics,
@@ -190,6 +209,24 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(slider("Ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
                 "How fast an anchor drifts toward the hand on ice. 0 = grips like stone, 0.95 = push off only.",
                 v -> MovementConfig.gtIceSlip = v));
+
+        // ---- Hoverboard ----
+        this.list.addBig(toggle("Hoverboard enabled", MovementConfig.hoverboardEnabled,
+                "Hold the Hoverboard item and tilt it like a joystick: 45 degrees forward = full speed. Speed Swing mode only.",
+                v -> MovementConfig.hoverboardEnabled = v));
+        this.list.addBig(slider("Hoverboard top speed", 0.0, 2.0, MovementConfig.hoverMaxSpeed,
+                "Blocks/tick. 0.7 = 14 blocks/sec.",
+                v -> MovementConfig.hoverMaxSpeed = v));
+        this.list.addBig(slider("Hoverboard tilt offset (deg)", -90.0, 90.0, MovementConfig.hoverTiltOffset,
+                "Shifts what counts as 'level'. Drifting forward when level? Lower this.",
+                v -> MovementConfig.hoverTiltOffset = v));
+
+        // ---- Cosmetics ----
+        for (Cosmetic c : Cosmetics.all()) {
+            this.list.addBig(toggle("Cosmetic: " + c.name, Cosmetics.isEquipped(c.id),
+                    "Free cosmetic. Other players with ViveMonkeCraft see what you wear.",
+                    v -> Cosmetics.setEquipped(c.id, v)));
+        }
 
         // ---- Experimental ----
         this.list.addBig(toggle("Allow Vivecraft teleport", MovementConfig.allowTeleport,
@@ -225,12 +262,13 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
     /** An on/off toggle bound to a boolean field. */
     private static OptionInstance<Boolean> toggle(String label, boolean current, String tooltip,
-                                                  OptionInstance.ValueUpdateListener<Boolean> setter) {
+                                                  Consumer<Boolean> setter) {
+        // setter::accept fits both the 26.2+ ValueUpdateListener and the older Consumer.
         return OptionInstance.createBoolean(
                 label,
                 OptionInstance.cachedConstantTooltip(Component.literal(tooltip)),
                 current,
-                setter);
+                setter::accept);
     }
 
     /**
@@ -248,88 +286,5 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 OptionInstance.UnitDouble.INSTANCE,
                 t0,
                 value -> setter.accept(min + value * (max - min)));
-    }
-
-    // =========================================================================
-    // PRESETS  (copied verbatim from the Cloth VmcConfigScreen so behaviour matches)
-    // =========================================================================
-    private static void applyPreset(String preset) {
-        MovementConfig.applyDefaultPreset();
-        switch (preset) {
-            case "Default":
-                break;
-            case "tutorial":
-                MovementConfig.pullStrength        = 2.5;
-                MovementConfig.groundFriction      = 1.0;
-                MovementConfig.airFriction         = 0.1;
-                MovementConfig.wallStickiness      = 1.0;
-                MovementConfig.floorStickiness     = 1.0;
-                MovementConfig.minImpulse          = 0.002;
-                MovementConfig.handReachMultiplier = 1.0;
-                MovementConfig.velocityLimit       = 0.05;
-                MovementConfig.maxArmLength        = 3.0;
-                MovementConfig.handRadius          = 0.12;
-                MovementConfig.hitboxHeightScale   = 0.25;
-                MovementConfig.stepAssist          = true;
-                MovementConfig.stepTeleport        = true;
-                MovementConfig.stepHeight          = 1.5;
-                MovementConfig.jumpMultiplier      = 1.5;
-                MovementConfig.maxJumpSpeed        = 1.0;
-                MovementConfig.velocityHistorySize = 6;
-                MovementConfig.gravityMultiplier   = 1.0;
-                MovementConfig.showHandMarkers     = true;
-                MovementConfig.monkeModel          = true;
-                MovementConfig.realMonke           = true;
-                MovementConfig.modelTorsoPitch     = -120.0;
-                MovementConfig.gtPhysics           = false;
-                break;
-            case "Long Arms":
-                MovementConfig.pullStrength        = 2.5;
-                MovementConfig.groundFriction      = 0.4;
-                MovementConfig.airFriction         = 0.1;
-                MovementConfig.wallStickiness      = 0.9;
-                MovementConfig.floorStickiness     = 1.0;
-                MovementConfig.minImpulse          = 0.002;
-                MovementConfig.handReachMultiplier = 3.5;
-                MovementConfig.velocityLimit       = 0.05;
-                MovementConfig.jumpMultiplier      = 1.8;
-                MovementConfig.maxJumpSpeed        = 1.5;
-                MovementConfig.velocityHistorySize = 5;
-                MovementConfig.gravityMultiplier   = 1.0;
-                MovementConfig.showHandMarkers     = true;
-                MovementConfig.monkeModel          = true;
-                MovementConfig.realMonke           = true;
-                MovementConfig.modelTorsoPitch     = -120.0;
-                break;
-            case "Zero Gravity":
-                MovementConfig.gravityMultiplier   = 0.1;
-                MovementConfig.airFriction         = 0.05;
-                MovementConfig.wallStickiness      = 1.0;
-                MovementConfig.floorStickiness     = 0.8;
-                MovementConfig.pullStrength        = 2.0;
-                MovementConfig.jumpMultiplier      = 2.0;
-                MovementConfig.maxJumpSpeed        = 2.5;
-                MovementConfig.groundFriction      = 0.9;
-                MovementConfig.monkeModel          = true;
-                MovementConfig.realMonke           = true;
-                MovementConfig.modelTorsoPitch     = -120.0;
-                break;
-            case "Speed Run":
-                MovementConfig.pullStrength        = 5.0;
-                MovementConfig.handReachMultiplier = 1.0;
-                MovementConfig.maxArmLength        = 1.5;
-                MovementConfig.airFriction         = 0.1;
-                MovementConfig.jumpMultiplier      = 3.5;
-                MovementConfig.maxJumpSpeed        = 3.0;
-                MovementConfig.velocityHistorySize = 4;
-                MovementConfig.groundFriction      = 0.7;
-                MovementConfig.gravityMultiplier   = 0.9;
-                MovementConfig.monkeModel          = true;
-                MovementConfig.realMonke           = true;
-                MovementConfig.modelTorsoPitch     = -120.0;
-                break;
-            default:
-                break;
-        }
     }
 }

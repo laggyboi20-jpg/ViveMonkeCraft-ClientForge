@@ -1,0 +1,43 @@
+# Per-version settings for every Minecraft version this branch builds.
+# Values in a [version] table override the top-level ones for that version.
+
+mod.id = "vivemonkecraft"
+mod.version = "1.1.0.0"
+mod.archive = "ViveMonkeCraft-Forge"
+
+# Forge versions match the old per-version release branches (26.3 is new).
+["1.21.4"]
+deps.forge = "54.1.14"
+
+["1.21.5"]
+deps.forge = "55.1.0"
+
+["1.21.6"]
+deps.forge = "56.0.9"
+
+["1.21.7"]
+deps.forge = "57.0.3"
+
+["1.21.8"]
+deps.forge = "58.1.0"
+
+["1.21.9"]
+deps.forge = "59.0.5"
+
+["1.21.10"]
+deps.forge = "60.1.0"
+
+["1.21.11"]
+deps.forge = "61.1.0"
+
+["26.1.1"]
+deps.forge = "63.0.2"
+
+["26.1.2"]
+deps.forge = "64.1.0"
+
+["26.2"]
+deps.forge = "65.1.0"
+
+["26.3"]
+deps.forge = "66.0.13"
