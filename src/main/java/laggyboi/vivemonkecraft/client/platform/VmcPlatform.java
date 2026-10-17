@@ -43,13 +43,16 @@ public final class VmcPlatform {
      * ids can't contain hyphens. Callers pass BOTH spellings, so this needs no
      * translation — but don't "tidy" the caller into checking only one.
      */
-    // NOTE: unlike NeoForge (ModList.get().isLoaded(...)), Forge 26.x's ModList is
-    // entirely STATIC — there is no get(). Every method below is wrapped in a
-    // try/catch because these are also called from the debug logger, which must
+    // NOTE: Forge 26.x's ModList is entirely STATIC (no get()); 1.21.x still has
+    // ModList.get(). Each call site carries both. Every method below is wrapped in
+    // a try/catch because these are also called from the debug logger, which must
     // never throw: it can run before the mod list is populated.
     public static boolean isModLoaded(String id) {
         try {
+            //? if >=26.1 {
             return ModList.isLoaded(id);
+            //?} else
+            /*return ModList.get().isLoaded(id);*/
         } catch (Throwable t) {
             return false;
         }
@@ -58,9 +61,15 @@ public final class VmcPlatform {
     /** Friendly version string for a mod id, or "absent" when it isn't installed. */
     public static String modVersion(String id) {
         try {
+            //? if >=26.1 {
             return ModList.getModContainerById(id)
                     .map(c -> c.getModInfo().getVersion().toString())
                     .orElse("absent");
+            //?} else {
+            /*return ModList.get().getModContainerById(id)
+                    .map(c -> c.getModInfo().getVersion().toString())
+                    .orElse("absent");
+            *///?}
         } catch (Throwable t) {
             return "absent";
         }
@@ -74,7 +83,10 @@ public final class VmcPlatform {
     /** Total loaded mod count — debug env dump. */
     public static int modCount() {
         try {
+            //? if >=26.1 {
             return ModList.size();
+            //?} else
+            /*return ModList.get().size();*/
         } catch (Throwable t) {
             return 0;
         }
@@ -83,10 +95,17 @@ public final class VmcPlatform {
     /** "<id> <version>" for every loaded mod, sorted by id — debug env dump. */
     public static List<String> allMods() {
         try {
+            //? if >=26.1 {
             return ModList.getMods().stream()
                     .sorted(java.util.Comparator.comparing(IModInfo::getModId))
                     .map(m -> m.getModId() + " " + m.getVersion().toString())
                     .collect(Collectors.toList());
+            //?} else {
+            /*return ModList.get().getMods().stream()
+                    .sorted(java.util.Comparator.comparing(IModInfo::getModId))
+                    .map(m -> m.getModId() + " " + m.getVersion().toString())
+                    .collect(Collectors.toList());
+            *///?}
         } catch (Throwable t) {
             return List.of();
         }

@@ -2,35 +2,32 @@ package laggyboi.vivemonkecraft.client.platform;
 
 import laggyboi.vivemonkecraft.client.VivemonkecraftClient;
 import laggyboi.vivemonkecraft.client.VmcCommands;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraftforge.client.event.RegisterClientCommandsEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.client.ConfigScreenHandler;
-import net.minecraftforge.fml.ModLoadingContext;
 import laggyboi.vivemonkecraft.client.VmcForgeConfigScreen;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.common.Mod;
+//? if <1.21.6 {
+/*import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.eventbus.api.EventPriority;
+*///?}
 
 // =====================================================================
 // LOADER ENTRY POINT                                         [FORGE BODY]
 // =====================================================================
 //
 // The ONLY class that knows what a mod entry point looks like on this loader.
-// Everything it does is: register the keybind, register the /vmc command with
-// this loader's command event, and hand off to the shared VivemonkecraftClient.
+// Everything it does is: register the keybinds and items, register the /vmc
+// command with this loader's command event, wire the config screen, and hand
+// off to the shared VivemonkecraftClient.
 //
-// The Fabric branch replaces this file with a ClientModInitializer and the
-// NeoForge branch with a @Mod(dist = CLIENT) constructor. Nothing else changes
-// between branches.
+// Config screen: Cloth Config has no Forge build for these versions, so the
+// Forge branch ships its own vanilla-widget screen (VmcForgeConfigScreen) and
+// offers it through Forge's "Config" button on the Mods list.
 //
-// NO CONFIG SCREEN HERE: Cloth Config has no Forge build for Minecraft 26.x, so
-// VmcConfigScreen is excluded from compilation on this branch (see build.gradle).
-// Forge users configure via config/vivemonkecraft.properties, "/vmc reload" and
-// "/vmc set <setting> <value>" (which tab-completes every setting name).
-//
-// Client-only: unlike NeoForge there is no dist attribute on Forge's @Mod, so
-// this mod is kept off servers by mods.toml (displayTest + CLIENT-side deps) and
-// by simply never touching server-only code paths. It must still be able to
-// CONNECT to servers that don't have it — see the optional-channel contract in
-// VmcNet.
+// The mod is client-only (mods.toml clientSideOnly=true). It must still be able
+// to CONNECT to servers that don't have it — see the optional channel in VmcNet.
 // =====================================================================
 @Mod("vivemonkecraft")
 public final class VmcBootstrap {
@@ -38,20 +35,19 @@ public final class VmcBootstrap {
     public VmcBootstrap() {
 
         VmcKeybinds.init();
+        VmcItems.init();
 
-        // MUST be RegisterClientCommandsEvent, not RegisterCommandsEvent — this is
-        // a client-only mod, so a server-side registration would leave /vmc working
-        // in singleplayer but dead on dedicated servers. Forge dispatches client
-        // commands with CommandSourceStack; the shared tree is generic over the
-        // source type, so it slots straight in.
+        // The /vmc command. RegisterClientCommandsEvent (not RegisterCommandsEvent):
+        // this is a CLIENT-ONLY mod, so a server-side registration would only exist
+        // on the integrated server and /vmc would vanish on dedicated servers.
+        //? if >=1.21.6 {
         RegisterClientCommandsEvent.BUS.addListener(event ->
                 event.getDispatcher().register(VmcCommands.<CommandSourceStack>build()));
+        //?} else {
+        /*MinecraftForge.EVENT_BUS.addListener(EventPriority.NORMAL, false, RegisterClientCommandsEvent.class,
+                event -> event.getDispatcher().register(VmcCommands.<CommandSourceStack>build()));
+        *///?}
 
-        // Config screen: Forge's OWN "Config" button in the Mods list. Built from
-        // pure VANILLA widgets (VmcForgeConfigScreen), so unlike the Cloth screen it
-        // needs no dependency and is always available on Forge.
-        // NOTE (per-version): ConfigScreenHandler.ConfigScreenFactory is the Forge
-        // 1.19-1.21 config-button API; if 26.x renamed it, this is the only call to fix.
         ModLoadingContext.get().registerExtensionPoint(
                 ConfigScreenHandler.ConfigScreenFactory.class,
                 () -> new ConfigScreenHandler.ConfigScreenFactory(
