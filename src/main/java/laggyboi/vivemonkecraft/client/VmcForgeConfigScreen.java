@@ -232,6 +232,9 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(toggle("Hoverboard enabled", MovementConfig.hoverboardEnabled,
                 "Hold the Hoverboard item and tilt it like a joystick: 45 degrees forward = full speed. Speed Swing mode only.",
                 v -> MovementConfig.hoverboardEnabled = v));
+        this.list.addBig(slider("Hoverboard height", 0.0, 4.0, MovementConfig.hoverHeight,
+                "Feet-to-ground gap (blocks). Up to 4 in singleplayer / with op; 0.5 max on servers (they kick flyers).",
+                v -> MovementConfig.hoverHeight = v));
         this.list.addBig(slider("Hoverboard top speed", 0.0, 2.0, MovementConfig.hoverMaxSpeed,
                 "Blocks/tick. 0.7 = 14 blocks/sec.",
                 v -> MovementConfig.hoverMaxSpeed = v));
