@@ -191,7 +191,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 v -> MovementConfig.punchMiningNoTool = v));
         this.list.addBig(toggle("Magma block sides hurt", MovementConfig.magmaTouchDamage,
                 "Grabbing a magma block on any face deals the hot-floor damage. Fire resistance negates it.",
-                v -> MovementConfig.stepTeleport = v));
+                v -> MovementConfig.magmaTouchDamage = v));
 
         // ---- Gorilla Tag (locomotion mode 1: the Player.cs clone, GT units: 1 block = 1 m) ----
         this.list.addBig(toggle("Gorilla Tag mode", MovementConfig.locomotionMode == GorillaLocomotionHandler.MODE_GT_ANCHOR,
@@ -227,6 +227,12 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(slider("GT ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
                 "How much a hand slides along ice. 0 = grips like stone, 1 = frictionless.",
                 v -> MovementConfig.gtIceSlip = v));
+        this.list.addBig(toggle("GT climb on mobs", MovementConfig.gtEntityColliders,
+                "Hands grab and you can stand on mobs and players (their hitbox). You move with them when they walk.",
+                v -> MovementConfig.gtEntityColliders = v));
+        this.list.addBig(toggle("GT turn with mobs", MovementConfig.gtEntityTurnWithMob,
+                "While standing on a mob, your view turns when it turns (like riding a horse).",
+                v -> MovementConfig.gtEntityTurnWithMob = v));
 
         // ---- Hoverboard ----
         this.list.addBig(toggle("Hoverboard enabled", MovementConfig.hoverboardEnabled,
