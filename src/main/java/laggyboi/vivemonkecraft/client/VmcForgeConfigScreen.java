@@ -193,21 +193,39 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 "Grabbing a magma block on any face deals the hot-floor damage. Fire resistance negates it.",
                 v -> MovementConfig.stepTeleport = v));
 
-        // ---- GT physics ----
-        this.list.addBig(toggle("GT physics beta (anchor mode)", MovementConfig.gtPhysics,
-                "ON = official GorillaLocomotion algorithm: hands anchor and drag your body 1:1. OFF = older speed-based model.",
-                v -> MovementConfig.gtPhysics = v));
-        this.list.addBig(slider("Push strength", 0.1, 100.0, MovementConfig.gtPushStrength,
-                "Body movement = hand movement x this. 1.0 = authentic Gorilla Tag 1:1.",
-                v -> MovementConfig.gtPushStrength = v));
-        this.list.addBig(slider("Drag gain", 0.05, 100.0, MovementConfig.gtDragGain,
-                "Fraction of the distance to the anchor corrected each tick. 0.30 = smooth. Keep below 1.0.",
-                v -> MovementConfig.gtDragGain = v));
-        this.list.addBig(slider("Unstick distance (blocks)", 0.2, 3.0, MovementConfig.gtUnstickDistance,
-                "How far a hand may stray from its anchor before the grip releases. GT uses 1.0.",
+        // ---- Gorilla Tag (locomotion mode 1: the Player.cs clone, GT units: 1 block = 1 m) ----
+        this.list.addBig(toggle("Gorilla Tag mode", MovementConfig.locomotionMode == GorillaLocomotionHandler.MODE_GT_ANCHOR,
+                "ON = a clone of Gorilla Tag's own Player.cs: hands stick where they touch, 1:1 body movement, real gravity, GT's throw. OFF = Speed Swing.",
+                v -> MovementConfig.locomotionMode = v ? GorillaLocomotionHandler.MODE_GT_ANCHOR : GorillaLocomotionHandler.MODE_SPEED_SWING));
+        this.list.addBig(slider("GT jump multiplier", 0.0, 10.0, MovementConfig.gtJumpMultiplier,
+                "Throw = average body speed x this. Gorilla Tag: 1.1",
+                v -> MovementConfig.gtJumpMultiplier = v));
+        this.list.addBig(slider("GT max jump speed (m/s)", 0.0, 60.0, MovementConfig.gtMaxJumpSpeed,
+                "Throw speed cap. Gorilla Tag: 6.5",
+                v -> MovementConfig.gtMaxJumpSpeed = v));
+        this.list.addBig(slider("GT velocity limit (m/s)", 0.0, 10.0, MovementConfig.gtVelocityLimit,
+                "Moving slower than this never throws you. Gorilla Tag: 0.3",
+                v -> MovementConfig.gtVelocityLimit = v));
+        this.list.addBig(slider("GT velocity history (ticks)", 1.0, 20.0, MovementConfig.gtVelocityHistory,
+                "Ticks averaged for the throw. 2 = Gorilla Tag's 3 frames.",
+                v -> MovementConfig.gtVelocityHistory = v));
+        this.list.addBig(slider("GT arm length (m)", 0.2, 5.0, MovementConfig.gtArmLength,
+                "Hands are held within this distance of your head. Gorilla Tag: 1.5",
+                v -> MovementConfig.gtArmLength = v));
+        this.list.addBig(slider("GT hand radius (m)", 0.01, 0.5, MovementConfig.gtHandRadius,
+                "Size of each hand's collision sphere. Gorilla Tag: 0.05",
+                v -> MovementConfig.gtHandRadius = v));
+        this.list.addBig(slider("GT gravity (m/s2)", 0.0, 40.0, MovementConfig.gtGravity,
+                "Gorilla Tag uses real gravity, 9.81 (Minecraft's is ~32).",
+                v -> MovementConfig.gtGravity = v));
+        this.list.addBig(slider("GT ground friction", 0.0, 1.0, MovementConfig.gtGroundFriction,
+                "Speed kept per tick while standing. 1 = no friction, 0 = instant stop.",
+                v -> MovementConfig.gtGroundFriction = v));
+        this.list.addBig(slider("GT unstick distance (m)", 0.2, 3.0, MovementConfig.gtUnstickDistance,
+                "A stuck hand lets go once it is this far from where it touched. Gorilla Tag: 1.0",
                 v -> MovementConfig.gtUnstickDistance = v));
-        this.list.addBig(slider("Ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
-                "How fast an anchor drifts toward the hand on ice. 0 = grips like stone, 0.95 = push off only.",
+        this.list.addBig(slider("GT ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
+                "How much a hand slides along ice. 0 = grips like stone, 1 = frictionless.",
                 v -> MovementConfig.gtIceSlip = v));
 
         // ---- Hoverboard ----
