@@ -84,10 +84,9 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         //?} else
         /*this.list.addSmall(presetButton, null);*/
 
-        // ---- Movement ----
-        this.list.addBig(toggle("Step assist", MovementConfig.stepAssist,
-                "Raise step height so legs stop snagging on block edges.",
-                v -> MovementConfig.stepAssist = v));
+        // ---- Speed Swing (locomotion mode 0) ----
+        this.list.addBig(modeToggle("Speed Swing movement", GorillaLocomotionHandler.MODE_SPEED_SWING,
+                "The classic ViveMonkeCraft movement: your body moves opposite to how FAST your hand swings. Turning this ON turns Gorilla Tag OFF."));
         this.list.addBig(slider("Push speed", 0.0, 8.0, MovementConfig.pullStrength,
                 "How strongly your swing moves you. 1.0 = 1:1, higher = faster. (Speed Swing mode.)",
                 v -> MovementConfig.pullStrength = v));
@@ -106,8 +105,6 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(slider("Jitter filter (minImpulse)", 0.0, 0.1, MovementConfig.minImpulse,
                 "Movements smaller than this are ignored so a resting hand stays still.",
                 v -> MovementConfig.minImpulse = v));
-
-        // ---- Reach & Body ----
         this.list.addBig(slider("Gorilla arm length", 1.0, 6.0, MovementConfig.handReachMultiplier,
                 "Longer arms = reach the ground with less real-arm reach. 1.0 = real arms (default).",
                 v -> MovementConfig.handReachMultiplier = v));
@@ -117,14 +114,6 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(slider("Hand grab size", 0.02, 0.5, MovementConfig.handRadius,
                 "Radius of the hand touch sphere. Bigger = easier to grab.",
                 v -> MovementConfig.handRadius = v));
-        this.list.addBig(slider("Hitbox height (legs)", 0.2, 1.0, MovementConfig.hitboxHeightScale,
-                "Shrinks your collision box height to climb onto blocks. 1.0 = normal, 0.25 = compact.",
-                v -> MovementConfig.hitboxHeightScale = v));
-        this.list.addBig(slider("Step height", 0.5, 2.0, MovementConfig.stepHeight,
-                "Ledge height you can step over. 0.6 = vanilla, 1.0 = default.",
-                v -> MovementConfig.stepHeight = v));
-
-        // ---- Jump & Gravity ----
         this.list.addBig(slider("Jump threshold", 0.0, 1.0, MovementConfig.velocityLimit,
                 "You only launch on release if you were moving faster than this.",
                 v -> MovementConfig.velocityLimit = v));
@@ -140,6 +129,57 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         this.list.addBig(slider("Gravity", 0.0, 1.0, MovementConfig.gravityMultiplier,
                 "Scales gravity while airborne and not gripping. 1.0 = normal, 0.0 = float. Also /vmc gravity <0-1>.",
                 v -> MovementConfig.gravityMultiplier = v));
+
+        // ---- Gorilla Tag (locomotion mode 1: the Player.cs clone, GT units: 1 block = 1 m) ----
+        this.list.addBig(modeToggle("Gorilla Tag physics", GorillaLocomotionHandler.MODE_GT_ANCHOR,
+                "A clone of Gorilla Tag's own Player.cs: hands stick where they touch, 1:1 body movement, real gravity, GT's throw. The default. Turning this ON turns Speed Swing OFF."));
+        this.list.addBig(slider("GT jump multiplier", 0.0, 10.0, MovementConfig.gtJumpMultiplier,
+                "Throw = average body speed x this. Gorilla Tag: 1.1",
+                v -> MovementConfig.gtJumpMultiplier = v));
+        this.list.addBig(slider("GT max jump speed (m/s)", 0.0, 60.0, MovementConfig.gtMaxJumpSpeed,
+                "Throw speed cap. Gorilla Tag: 6.5",
+                v -> MovementConfig.gtMaxJumpSpeed = v));
+        this.list.addBig(slider("GT velocity limit (m/s)", 0.0, 10.0, MovementConfig.gtVelocityLimit,
+                "Moving slower than this never throws you. Gorilla Tag: 0.3",
+                v -> MovementConfig.gtVelocityLimit = v));
+        this.list.addBig(slider("GT velocity history (ticks)", 1.0, 20.0, MovementConfig.gtVelocityHistory,
+                "Ticks averaged for the throw. 2 = Gorilla Tag's 3 frames.",
+                v -> MovementConfig.gtVelocityHistory = v));
+        this.list.addBig(slider("GT arm length (m)", 0.2, 5.0, MovementConfig.gtArmLength,
+                "Hands are held within this distance of your head. Gorilla Tag: 1.5",
+                v -> MovementConfig.gtArmLength = v));
+        this.list.addBig(slider("GT hand radius (m)", 0.01, 0.5, MovementConfig.gtHandRadius,
+                "Size of each hand's collision sphere. Gorilla Tag: 0.05",
+                v -> MovementConfig.gtHandRadius = v));
+        this.list.addBig(slider("GT gravity (m/s2)", 0.0, 40.0, MovementConfig.gtGravity,
+                "Gorilla Tag uses real gravity, 9.81 (Minecraft's is ~32).",
+                v -> MovementConfig.gtGravity = v));
+        this.list.addBig(slider("GT ground friction", 0.0, 1.0, MovementConfig.gtGroundFriction,
+                "Speed kept per tick while standing. 1 = no friction, 0 = instant stop.",
+                v -> MovementConfig.gtGroundFriction = v));
+        this.list.addBig(slider("GT unstick distance (m)", 0.2, 3.0, MovementConfig.gtUnstickDistance,
+                "A stuck hand lets go once it is this far from where it touched. Gorilla Tag: 1.0",
+                v -> MovementConfig.gtUnstickDistance = v));
+        this.list.addBig(slider("GT ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
+                "How much a hand slides along ice. 0 = grips like stone, 1 = frictionless.",
+                v -> MovementConfig.gtIceSlip = v));
+        this.list.addBig(toggle("GT climb on mobs", MovementConfig.gtEntityColliders,
+                "Hands grab and you can stand on mobs and players (their hitbox). You move with them when they walk.",
+                v -> MovementConfig.gtEntityColliders = v));
+        this.list.addBig(toggle("GT turn with mobs", MovementConfig.gtEntityTurnWithMob,
+                "While standing on a mob, your view turns when it turns (like riding a horse).",
+                v -> MovementConfig.gtEntityTurnWithMob = v));
+
+        // ---- Body (every locomotion mode) ----
+        this.list.addBig(toggle("Step assist", MovementConfig.stepAssist,
+                "Raise step height so legs stop snagging on block edges.",
+                v -> MovementConfig.stepAssist = v));
+        this.list.addBig(slider("Hitbox height (legs)", 0.2, 1.0, MovementConfig.hitboxHeightScale,
+                "Shrinks your collision box height to climb onto blocks. 1.0 = normal, 0.25 = compact.",
+                v -> MovementConfig.hitboxHeightScale = v));
+        this.list.addBig(slider("Step height", 0.5, 2.0, MovementConfig.stepHeight,
+                "Ledge height you can step over. 0.6 = vanilla, 1.0 = default.",
+                v -> MovementConfig.stepHeight = v));
 
         // ---- Visual ----
         this.list.addBig(toggle("Clamp hand models to surfaces", MovementConfig.clampHandModels,
@@ -190,47 +230,6 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 "Grabbing a magma block on any face deals the hot-floor damage. Fire resistance negates it.",
                 v -> MovementConfig.magmaTouchDamage = v));
 
-        // ---- Gorilla Tag (locomotion mode 1: the Player.cs clone, GT units: 1 block = 1 m) ----
-        this.list.addBig(toggle("Gorilla Tag mode", MovementConfig.locomotionMode == GorillaLocomotionHandler.MODE_GT_ANCHOR,
-                "ON = a clone of Gorilla Tag's own Player.cs: hands stick where they touch, 1:1 body movement, real gravity, GT's throw. OFF = Speed Swing.",
-                v -> MovementConfig.locomotionMode = v ? GorillaLocomotionHandler.MODE_GT_ANCHOR : GorillaLocomotionHandler.MODE_SPEED_SWING));
-        this.list.addBig(slider("GT jump multiplier", 0.0, 10.0, MovementConfig.gtJumpMultiplier,
-                "Throw = average body speed x this. Gorilla Tag: 1.1",
-                v -> MovementConfig.gtJumpMultiplier = v));
-        this.list.addBig(slider("GT max jump speed (m/s)", 0.0, 60.0, MovementConfig.gtMaxJumpSpeed,
-                "Throw speed cap. Gorilla Tag: 6.5",
-                v -> MovementConfig.gtMaxJumpSpeed = v));
-        this.list.addBig(slider("GT velocity limit (m/s)", 0.0, 10.0, MovementConfig.gtVelocityLimit,
-                "Moving slower than this never throws you. Gorilla Tag: 0.3",
-                v -> MovementConfig.gtVelocityLimit = v));
-        this.list.addBig(slider("GT velocity history (ticks)", 1.0, 20.0, MovementConfig.gtVelocityHistory,
-                "Ticks averaged for the throw. 2 = Gorilla Tag's 3 frames.",
-                v -> MovementConfig.gtVelocityHistory = v));
-        this.list.addBig(slider("GT arm length (m)", 0.2, 5.0, MovementConfig.gtArmLength,
-                "Hands are held within this distance of your head. Gorilla Tag: 1.5",
-                v -> MovementConfig.gtArmLength = v));
-        this.list.addBig(slider("GT hand radius (m)", 0.01, 0.5, MovementConfig.gtHandRadius,
-                "Size of each hand's collision sphere. Gorilla Tag: 0.05",
-                v -> MovementConfig.gtHandRadius = v));
-        this.list.addBig(slider("GT gravity (m/s2)", 0.0, 40.0, MovementConfig.gtGravity,
-                "Gorilla Tag uses real gravity, 9.81 (Minecraft's is ~32).",
-                v -> MovementConfig.gtGravity = v));
-        this.list.addBig(slider("GT ground friction", 0.0, 1.0, MovementConfig.gtGroundFriction,
-                "Speed kept per tick while standing. 1 = no friction, 0 = instant stop.",
-                v -> MovementConfig.gtGroundFriction = v));
-        this.list.addBig(slider("GT unstick distance (m)", 0.2, 3.0, MovementConfig.gtUnstickDistance,
-                "A stuck hand lets go once it is this far from where it touched. Gorilla Tag: 1.0",
-                v -> MovementConfig.gtUnstickDistance = v));
-        this.list.addBig(slider("GT ice slip", 0.0, 1.0, MovementConfig.gtIceSlip,
-                "How much a hand slides along ice. 0 = grips like stone, 1 = frictionless.",
-                v -> MovementConfig.gtIceSlip = v));
-        this.list.addBig(toggle("GT climb on mobs", MovementConfig.gtEntityColliders,
-                "Hands grab and you can stand on mobs and players (their hitbox). You move with them when they walk.",
-                v -> MovementConfig.gtEntityColliders = v));
-        this.list.addBig(toggle("GT turn with mobs", MovementConfig.gtEntityTurnWithMob,
-                "While standing on a mob, your view turns when it turns (like riding a horse).",
-                v -> MovementConfig.gtEntityTurnWithMob = v));
-
         // ---- Hoverboard ----
         this.list.addBig(toggle("Hoverboard enabled", MovementConfig.hoverboardEnabled,
                 "Hold the Hoverboard item and tilt it like a joystick: 45 degrees forward = full speed. Speed Swing and Gorilla Tag modes.",
@@ -253,6 +252,14 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         }
 
         // ---- Experimental ----
+        this.list.addBig(modeToggle("Charge Jump movement (experimental)", GorillaLocomotionHandler.MODE_CHARGE_JUMP,
+                "Hold a hand on a surface to charge, let go to launch away from it. Turning this ON turns the other modes OFF."));
+        this.list.addBig(slider("Charge Jump: tap launch", 0.0, 3.0, MovementConfig.chargeMinLaunch,
+                "Launch speed (blocks/tick) for a quick tap.",
+                v -> MovementConfig.chargeMinLaunch = v));
+        this.list.addBig(slider("Charge Jump: full-charge launch", 0.0, 3.0, MovementConfig.chargeMaxLaunch,
+                "Launch speed (blocks/tick) after a full ~1.5 s hold.",
+                v -> MovementConfig.chargeMaxLaunch = v));
         this.list.addBig(toggle("Allow Vivecraft teleport", MovementConfig.allowTeleport,
                 "OFF (default): teleport disabled while gorilla locomotion is on (it desyncs hand physics).",
                 v -> MovementConfig.allowTeleport = v));
@@ -283,6 +290,31 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
     // -----------------------------------------------------------------------
     // Vanilla-widget helpers — the only two places that touch OptionInstance.
     // -----------------------------------------------------------------------
+
+    /**
+     * One of the linked locomotion switches (Speed Swing / Gorilla Tag / Charge Jump):
+     * only one mode can run, so switching one ON turns the others OFF, and switching
+     * the active one OFF falls back to Gorilla Tag (or Speed Swing, if Gorilla Tag
+     * was switched off). The list is rebuilt so the other switches show it, keeping
+     * the scroll position.
+     */
+    private OptionInstance<Boolean> modeToggle(String label, int mode, String tooltip) {
+        return toggle(label, (int) MovementConfig.locomotionMode == mode, tooltip, on -> {
+            int current = (int) MovementConfig.locomotionMode;
+            if (on) {
+                MovementConfig.locomotionMode = mode;
+            } else if (current == mode) {
+                MovementConfig.locomotionMode = (mode == GorillaLocomotionHandler.MODE_GT_ANCHOR)
+                        ? GorillaLocomotionHandler.MODE_SPEED_SWING
+                        : GorillaLocomotionHandler.MODE_GT_ANCHOR;
+            } else {
+                return;
+            }
+            double scroll = this.list.scrollAmount();
+            this.rebuildWidgets();
+            this.list.setScrollAmount(scroll);
+        });
+    }
 
     /** An on/off toggle bound to a boolean field. */
     private static OptionInstance<Boolean> toggle(String label, boolean current, String tooltip,
