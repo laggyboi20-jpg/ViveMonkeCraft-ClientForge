@@ -85,14 +85,11 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
         /*this.list.addSmall(presetButton, null);*/
 
         // ---- Movement ----
-        this.list.addBig(toggle("Step assist teleports", MovementConfig.stepTeleport,
-                "ON = step assist places you directly on top of the ledge (instant). OFF = an upward velocity boost arcs you over it.",
-                v -> MovementConfig.stepTeleport = v));
         this.list.addBig(toggle("Step assist", MovementConfig.stepAssist,
                 "Raise step height so legs stop snagging on block edges.",
                 v -> MovementConfig.stepAssist = v));
         this.list.addBig(slider("Push speed", 0.0, 8.0, MovementConfig.pullStrength,
-                "How strongly your swing moves you. 1.0 = 1:1, higher = faster. (Ignored in anchor mode.)",
+                "How strongly your swing moves you. 1.0 = 1:1, higher = faster. (Speed Swing mode.)",
                 v -> MovementConfig.pullStrength = v));
         this.list.addBig(slider("Ground friction (anti-slide)", 0.0, 1.0, MovementConfig.groundFriction,
                 "1.0 = slide forever, 0.5 = stops fast, 0.2 = near-instant.",
@@ -112,7 +109,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
         // ---- Reach & Body ----
         this.list.addBig(slider("Gorilla arm length", 1.0, 6.0, MovementConfig.handReachMultiplier,
-                "Longer arms = reach the ground with less real-arm reach. 2.5 default.",
+                "Longer arms = reach the ground with less real-arm reach. 1.0 = real arms (default).",
                 v -> MovementConfig.handReachMultiplier = v));
         this.list.addBig(slider("Max arm length (blocks)", 1.5, 8.0, MovementConfig.maxArmLength,
                 "Hard limit on how far a hand can be from your head.",
@@ -124,7 +121,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
                 "Shrinks your collision box height to climb onto blocks. 1.0 = normal, 0.25 = compact.",
                 v -> MovementConfig.hitboxHeightScale = v));
         this.list.addBig(slider("Step height", 0.5, 2.0, MovementConfig.stepHeight,
-                "Ledge height you can step over. 0.6 = vanilla, 1.5 = default.",
+                "Ledge height you can step over. 0.6 = vanilla, 1.0 = default.",
                 v -> MovementConfig.stepHeight = v));
 
         // ---- Jump & Gravity ----
@@ -181,7 +178,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
         // ---- Block interactions ----
         this.list.addBig(toggle("Punch mining (experimental)", MovementConfig.punchMining,
-                "Break the block your hand touches, only with the right tool and only when you PUNCH it. Off by default.",
+                "Break the block your hand touches, only when you PUNCH it (and with the right tool unless the next option is on).",
                 v -> MovementConfig.punchMining = v));
         this.list.addBig(slider("Block-breaking threshold", 0.0, 1.0, MovementConfig.punchMiningThreshold,
                 "How easily you break blocks. 0 = damage on touch.",
@@ -236,7 +233,7 @@ public final class VmcForgeConfigScreen extends OptionsSubScreen {
 
         // ---- Hoverboard ----
         this.list.addBig(toggle("Hoverboard enabled", MovementConfig.hoverboardEnabled,
-                "Hold the Hoverboard item and tilt it like a joystick: 45 degrees forward = full speed. Speed Swing mode only.",
+                "Hold the Hoverboard item and tilt it like a joystick: 45 degrees forward = full speed. Speed Swing and Gorilla Tag modes.",
                 v -> MovementConfig.hoverboardEnabled = v));
         this.list.addBig(slider("Hoverboard height", 0.0, 4.0, MovementConfig.hoverHeight,
                 "Feet-to-ground gap (blocks). Up to 4 in singleplayer / with op; 0.5 max on servers (they kick flyers).",

@@ -80,14 +80,6 @@ public final class VmcNet {
                 StreamCodec<? super FriendlyByteBuf, T> codec,
                 BiConsumer<ServerPlayer, T> handler);
 
-        /**
-         * Client -> server payload with NO handler on this side. Used by the client
-         * mod for packets only the separate server companion answers; the type still
-         * has to be registered so the codec exists for sending.
-         */
-        <T extends CustomPacketPayload> void serverboundNoHandler(
-                CustomPacketPayload.Type<T> id,
-                StreamCodec<? super FriendlyByteBuf, T> codec);
     }
 
     /** Called once from the shared client init with every payload the mod uses. */
@@ -136,17 +128,6 @@ public final class VmcNet {
             });
         }
 
-        @Override
-        public <T extends CustomPacketPayload> void serverboundNoHandler(
-                CustomPacketPayload.Type<T> id,
-                StreamCodec<? super FriendlyByteBuf, T> codec) {
-            // Forge has no "type only" registration — register a no-op handler.
-            // These payloads are answered only by the separate server companion mod,
-            // so nothing on this side should ever receive them anyway.
-            if (toServer == null) toServer = protocol.serverbound();
-            toServer = toServer.addMain(id, cast(codec), (payload, context) -> { });
-        }
-
         Channel<CustomPacketPayload> finish() {
             if (toServer != null) return toServer.build();
             if (toClient != null) return toClient.build();
@@ -183,17 +164,17 @@ public final class VmcNet {
         return channel.isRemotePresent(listener.getConnection());
     }
 
-    /** Server -> one client. */
+    /** Server -> one client. Skipped for players without the mod (nothing would read it). */
     public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
-        if (channel == null) return;
+        if (channel == null || !channel.isRemotePresent(player.connection.getConnection())) return;
         channel.send(payload, PacketDistributor.PLAYER.with(player));
     }
 
-    /** Server -> every connected client. */
+    /** Server -> every connected client that has the mod. */
     public static void sendToAll(MinecraftServer server, CustomPacketPayload payload) {
         if (channel == null || server == null) return;
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            channel.send(payload, PacketDistributor.PLAYER.with(p));
+            sendToPlayer(p, payload);
         }
     }
 }
